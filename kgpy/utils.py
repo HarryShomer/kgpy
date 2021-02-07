@@ -20,12 +20,33 @@ def save_model(model, optimizer, epoch, step, dataset_name, suffix=""):
     }, os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}{suffix}.tar"))
 
 
-def load_model(model, optimizer, epoch, dataset_name):
+def load_model(model, optimizer, dataset_name, epoch=None):
     """
+    Load the saved model
     """
-    checkpoint = torch.load(os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}_epoch_{epoch}.tar"))
+    if epoch is None:
+        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}.tar")
+    else:
+        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}_epoch_{epoch}.tar")
 
+    if not os.path.isfile(file_path):
+        print(f"The model checkpoint for {model.name} at epoch {epoch} was never saved.")
+        return None, None
+
+    checkpoint = torch.load(file_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizersstate_dict'])
 
     return model, optimizer
+
+
+def checkpoint_exists(model_name, dataset_name, epoch=None):
+    """
+    Check if a given checkpoint was ever saved
+    """
+    if epoch is None:
+        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model_name}.tar")
+    else:
+        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model_name}_epoch_{epoch}.tar")
+
+    return os.path.isfile(file_path)

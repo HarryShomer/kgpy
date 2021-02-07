@@ -5,9 +5,9 @@ from torch.utils import tensorboard
 from torch.utils.tensorboard import SummaryWriter
 
 import load_data
-import create_model
+import models
 import utils
-from evaluation import test_model
+from evaluation import test_model, validate_model
 
 
 if torch.cuda.is_available():  
@@ -15,54 +15,58 @@ if torch.cuda.is_available():
 else:  
   device = "cpu"
 
+
 # Constants
 EPOCHS = 1000
-BATCH_SIZE = 128
-LEARNING_RATE = .01
+TRAIN_BATCH_SIZE = 128
+TEST_VAL_BATCH_SIZE = 16
+LEARNING_RATE = 0.001
 EVERY_N_EPOCHS_VAL = 5    # Test on validation set every N epochs
 EVERY_N_STEPS_TRAIN = 25  # Write training loss to tensorboard every N steps
-LAST_N_VAL = 4            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
+LAST_N_VAL = 5            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
     
 TENSORBOARD_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "runs")
 
 
-def test_diff_models(data):
+def test_diff_models(model, optimizer, data):
     """
+    Test different versions of a given model (at different epochs).
+
+    Also test the final main version (likely differs from last epoch version)
     """
-    test_loader = torch.utils.data.DataLoader(data.test, batch_size=16)
+    model, optimizer = utils.load_model(model, optimizer, data.dataset_name)
+    
+    print(f"\nTest Results - Last Saved:")
+    test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
-    for i in range(50, 1000, 50):
-        model = create_model.TransE(data.entities, data.relations)
-        model = model.to(device)
-        optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE)
-
-        model, optimizer = utils.load_model(model, optimizer, i, data.dataset_name)
+    # Now let's see how they did by epoch
+    for i in range(50, 1050, 50):
+        if not utils.checkpoint_exists(model.name, data.dataset_name, epoch=i):
+            print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
+            continue
+   
+        model, optimizer = utils.load_model(model, optimizer, data.dataset_name, epoch=i)
 
         print(f"\nTest Results - Epoch {i}:")
-        mr, mrr, hits_at_1, hits_at_3, hits_at_10 = test_model(model, test_loader, data.num_entities)
-        print(f"MR: {mr} \nMRR: {mrr} \nhits@1: {hits_at_1} \nhits@3: {hits_at_3} \nhits@10: {hits_at_10}\n")
+        test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
 
 
-
-def train(model, data):
+def train(model, optimizer, data):
     """
+    Train and validate the model
 
     Args:
         model:
+        optimizer
         data:
 
     Returns:
-
+        None
     """
-    summary_writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name))
+    summary_writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
 
-    train_loader = torch.utils.data.DataLoader(data.train, batch_size=BATCH_SIZE)
-    valid_loader = torch.utils.data.DataLoader(data.validation, batch_size=16)
-    test_loader = torch.utils.data.DataLoader(data.test, batch_size=16)
-
-    model = model.to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE)
+    train_loader = torch.utils.data.DataLoader(data.train, batch_size=TRAIN_BATCH_SIZE)
 
     step = 1
     val_mean_ranks = []
@@ -92,14 +96,14 @@ def train(model, data):
         # Save and test model on validation every every_n_epochs epochs
         # When validation hasn't improved in last `last_n_val` validation mean ranks
         if epoch % EVERY_N_EPOCHS_VAL == 0:
-            mr, mrr, hits_at_1, hits_at_3, hits_at_10 = test_model(model, valid_loader, data.num_entities)
+            mr, mrr, hits_at_1, hits_at_3, hits_at_10 = validate_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
             # Only save when we know the model performs better
-            summary_writer.add_scalar('Hits@1' , hits_at_1, epoch)
-            summary_writer.add_scalar('Hits@3' , hits_at_3, epoch)
-            summary_writer.add_scalar('Hits@10' , hits_at_10, epoch)
-            summary_writer.add_scalar('MR'     , mr, epoch)
-            summary_writer.add_scalar('MRR'    , mrr, epoch)
+            summary_writer.add_scalar('Hits@1%' , hits_at_1, epoch)
+            summary_writer.add_scalar('Hits@3%' , hits_at_3, epoch)
+            summary_writer.add_scalar('Hits@10%', hits_at_10, epoch)
+            summary_writer.add_scalar('MR'      , mr, epoch)
+            summary_writer.add_scalar('MRR'     , mrr, epoch)
 
             val_mean_ranks.append(mr)
         
@@ -119,17 +123,25 @@ def train(model, data):
 
     # Tet results
     print("\nTest Results:")
-    mr, mrr, hits_at_1, hits_at_3, hits_at_10 = test_model(model, test_loader, data.num_entities)
-    print(f"MR: {mr} \nMRR: {mrr} \nhits@1: {hits_at_1} \nhits@3: {hits_at_3} \nhits@10: {hits_at_10}\n")
+    test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
 
    
 
 def main():
     data = load_data.FB15k_237()
-    transe = create_model.TransE(data.entities, data.relations)
-    train(transe, data)
-    #test_diff_models(wn_data)
+    #data = load_data.WN18RR()
+
+    #model = models.DistMult(data.entities, data.relations)
+    model = models.TransE(data.entities, data.relations)
+
+    model = model.to(device)
+
+    #optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
+
+    train(model, optimizer, data)
+    #test_diff_models(model, optimizer, data)
 
 
 

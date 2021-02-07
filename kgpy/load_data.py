@@ -65,7 +65,6 @@ class CustomDataset(torch.utils.data.Dataset):
         return triplets
 
 
-
 class AllDataSet():
     """
     Base class for all possible datasets
@@ -81,7 +80,6 @@ class AllDataSet():
         self.validation = CustomDataset(dataset_name, "valid", self.entity2idx, self.relation2idx, relation_pos)
         self.test = CustomDataset(dataset_name, "test", self.entity2idx, self.relation2idx, relation_pos)
 
-        
 
     @property
     def num_entities(self):
@@ -90,6 +88,22 @@ class AllDataSet():
     @property
     def num_relations(self):
         return len(self.relations)
+
+
+    def __getitem__(self, key):
+        """
+        Get specific dataset
+        """
+        if key == 'train':
+            return self.train
+        if key == 'validation':
+            return self.validation
+        if key == "test":
+            return self.test
+
+        print("No key with name", key)
+
+        return None
 
 
     def _load_mapping(self):
@@ -108,6 +122,20 @@ class AllDataSet():
                 relation2idx[line_components[0]] = line_components[1]
 
         return entity2idx, relation2idx
+
+
+    def all_triplets(self):
+        """
+        Get all the index triplets across all the sets
+
+        Returns:
+            List of triplets
+        """
+        trip = [self.train[i] for i in range(len(self.train))]
+        trip += [self.validation[i] for i in range(len(self.validation))]
+        trip += [self.test[i] for i in range(len(self.test))]
+
+        return trip
 
 
 #######################################################
