@@ -1,9 +1,7 @@
 """
 Base model class
 """
-import copy
 import numpy as np
-from random import randint, choice
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
@@ -140,44 +138,6 @@ class Model(ABC, nn.Module):
 
         target = torch.ones_like(positive_scores, device=device)
         return self.loss_function(positive_scores, negative_scores, target) + reg
-
-
-    def corrupt_triplets(self, triplets):
-        """
-        Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
-
-        Args:
-            triplets: list of triplet to corrupt 
-
-        Returns:
-            Corrupted Triplets
-        """
-        corrupted_triplets = copy.deepcopy(triplets)
-
-        for i, t in enumerate(triplets):
-            head_tail = choice([0, 2])
-            corrupted_triplets[i][head_tail] = self.randint_exclude(0, len(self.entities), t[head_tail])
-
-        return corrupted_triplets
-
-
-    def randint_exclude(self, begin, end, exclude):
-        """
-        Randint but exclude a number
-
-        Args:
-            begin: begin of range
-            end: end of range (exclusive)
-            exclude: number to exclude
-
-        Returns:
-            randint not in exclude
-        """
-        while True:
-            x = randint(begin, end-1)
-
-            if x != exclude:
-                return x
 
 
     def normalize(self, embedding, p):

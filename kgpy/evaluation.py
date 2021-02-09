@@ -146,41 +146,26 @@ def evaluate_model(model, data, all_dataset):
     hits_at_3 = hits_at_3 / total_samples * 100
     hits_at_10 = hits_at_10 / total_samples * 100
 
-    print(f"MR: {mr} \nMRR: {mrr} \nHits@1%: {hits_at_1} \nHits@3%: {hits_at_3} \nHits@10%: {hits_at_10}\n")
+    print(f"\nMR: {mr} \nMRR: {mrr} \nHits@1%: {hits_at_1} \nHits@3%: {hits_at_3} \nHits@10%: {hits_at_10}\n")
 
     return mr, mrr, hits_at_1, hits_at_3, hits_at_10
 
 
-
-def test_model(model, data, batch_size=16):
+def test_model(model, data, batch_size):
     """
     Test the model. Wrapper for evaluate_model
 
     Args:
-        model: nn.Module object
-        data: AllDataSet object
-        batch_size: Batch for loader object. Defaults to 16
+        model: 
+            pytorch model
+        data:
+            AllDataset object
+        batch_size: 
+            Batch for loader object.
 
     Returns:
         Tuple of (mean-rank, mean-recipocal-rank, hits_at_1, hits_at_3, hits_at_10)
     """
-    dataloader = torch.utils.data.DataLoader(data['test'], batch_size=batch_size)
+    dataloader = torch.utils.data.DataLoader(self.data['test'], batch_size=batch_size)
 
-    return evaluate_model(model, dataloader, data)
-
-
-def validate_model(model, data, batch_size=16):
-    """
-    Validate the model. Wrapper for evaluate_model
-
-    Args:
-        model: nn.Module object
-        data: AllDataSet object
-        batch_size: Batch for loader object. Defaults to 16
-
-    Returns:
-        Tuple of (mean-rank, mean-recipocal-rank, hits_at_1, hits_at_3, hits_at_10)
-    """
-    dataloader = torch.utils.data.DataLoader(data['validation'], batch_size=batch_size)
-
-    return evaluate_model(model, dataloader, data)
+    return evaluate_model(self.model, dataloader, self.data)
