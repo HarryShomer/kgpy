@@ -1,7 +1,6 @@
 """
-Implementation of DistMult. 
 
-See paper for more details - https://arxiv.org/pdf/1412.6575.pdf.
+nn.init.normal_
 """
 import torch
 import numpy as np
@@ -15,9 +14,9 @@ else:
   device = "cpu"
 
 
-class DistMult(base_model.Model):
-    def __init__(self, entities, relations, latent_dim=100, margin=1, l2=0, l3=0.00001, weight_init=None):
-        super().__init__("DistMult", entities, relations, latent_dim, margin, l2, l3, weight_init)
+class Complex(base_model.Model):
+    def __init__(self, entities, relations, latent_dim=200, margin=1, l2=.01, l3=0, weight_init="normal"):
+        super().__init__("Complex", entities, relations, latent_dim, margin, l2, l3, weight_init)
         
 
     def score_function(self, triplets):
@@ -37,4 +36,3 @@ class DistMult(base_model.Model):
         t = self.entity_embeddings(triplets[:, 2])
 
         return torch.sum(h * r * t, dim=-1)
-

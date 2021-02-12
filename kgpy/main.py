@@ -2,7 +2,6 @@ import os
 import torch
 import argparse
 import numpy as np 
-from torch.utils import tensorboard
 from torch.utils.tensorboard import SummaryWriter
 
 import utils
@@ -18,11 +17,16 @@ else:
   device = "cpu"
 
 
+#parser = argparse.ArgumentParser(description='')
+#parser.add_argument('-t', "--reportType", help='Type of report to scrape. Either game or schedule.', default='game', type=str, required=False)  
+#parser.add_argument("--shifts", help='Whether to include shifts.', action='store_true', default=False, required=False)
+
+
 # Constants
 EPOCHS = 500
 TRAIN_BATCH_SIZE = 128
-TEST_VAL_BATCH_SIZE = 16
-LEARNING_RATE = 0.001
+TEST_VAL_BATCH_SIZE = 1
+LEARNING_RATE = 0.00025
 EVERY_N_EPOCHS_VAL = 5    # Test on validation set every N epochs
 EVERY_N_STEPS_TRAIN = 25  # Write training loss to tensorboard every N steps
 LAST_N_VAL = 5            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
@@ -39,10 +43,10 @@ def test_diff_models(model, optimizer, data):
     model, optimizer = utils.load_model(model, optimizer, data.dataset_name)
     
     print(f"\nTest Results - Last Saved:")
-    test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
+    evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
     # Now let's see how they did by epoch
-    for i in range(50, 1050, 50):
+    for i in range(25, EPOCHS+25, 25):
         if not utils.checkpoint_exists(model.name, data.dataset_name, epoch=i):
             print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
             continue
@@ -73,7 +77,7 @@ def run_model(model, optimizer, data):
     tensorboard_writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
 
     model_trainer = Trainer(model, optimizer, data, tensorboard_writer)
-    model_trainer.train(EPOCHS, TRAIN_BATCH_SIZE)
+    model_trainer.train(EPOCHS, TRAIN_BATCH_SIZE, val_batch_size=TEST_VAL_BATCH_SIZE)
 
     print("\nTest Results:")
     evaluation.test_model(model, data, TEST_VAL_BATCH_SIZE)
@@ -82,24 +86,19 @@ def run_model(model, optimizer, data):
   
 
 def main():
-
-    #parser = argparse.ArgumentParser(description='')
-    #parser.add_argument('-t', "--reportType", help='Type of report to scrape. Either game or schedule.', default='game', type=str, required=False)  
-    #parser.add_argument("--shifts", help='Whether to include shifts.', action='store_true', default=False, required=False)
-
     #data = load_data.FB15k_237()
     data = load_data.WN18RR()
 
-    #model = models.DistMult(data.entities, data.relations)
-    model = models.TransE(data.entities, data.relations)
+    model = models.DistMult(data.entities, data.relations, l3=1e-6, latent_dim=156)
+    #model = models.TransE(data.entities, data.relations, latent_dim=256)
 
     model = model.to(device)
 
-    #optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
 
-    run_model(model, optimizer, data)
-    #test_diff_models(model, optimizer, data)
+    #run_model(model, optimizer, data)
+    test_diff_models(model, optimizer, data)
+
 
 
 

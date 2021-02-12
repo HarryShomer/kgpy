@@ -1,6 +1,6 @@
 import os
 import torch
-from random import randint, choice
+from random import randint
 
 CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints")
 
@@ -53,7 +53,7 @@ def checkpoint_exists(model_name, dataset_name, epoch=None):
     return os.path.isfile(file_path)
 
 
-def randint_exclude(self, begin, end, exclude):
+def randint_exclude(begin, end, exclude):
     """
     Randint but exclude a number
 

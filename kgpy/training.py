@@ -1,12 +1,12 @@
 import os
 import copy
-import numpy as np
+import random
 import torch
-from torch.utils import tensorboard
-from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
-from evaluation import evaluate_model
 import utils
+from load_data import TrainDataset, TestDataset
+from evaluation import evaluate_model
 
 
 if torch.cuda.is_available():  
@@ -25,7 +25,7 @@ class Trainer:
         self.log_every_n_steps = log_every_n_steps
 
 
-    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=50):
+    def train(self, epochs, train_batch_size, validate_every=5, val_batch_size=16, early_stopping=5, save_every=25):
         """
         Train and validate the model
 
@@ -36,11 +36,11 @@ class Trainer:
                 Batch size to use for training
             validate_every: 
                 Validate every "n" epochs. Defaults to 5
-            non_train_batch_size: 
+            val_batch_size: 
                 Batch size for non-training data. Defaults to 16
             early_stopping: 
                 Stop training if the mean rank hasn't improved in last "n" validation scores. Defaults to 5
-            save_Every: 
+            save_every: 
                 Save model every "n" epochs. Defaults to 50
 
         Returns:
@@ -48,8 +48,10 @@ class Trainer:
         """
         step = 1
         val_mean_ranks = []
-        train_loader = torch.utils.data.DataLoader(self.data.train, batch_size=train_batch_size)
-
+        train_loader = torch.utils.data.DataLoader(
+                           TrainDataset(self.data.dataset_name, self.data.train_triplets), 
+                           batch_size=train_batch_size
+                       )
 
         for epoch in range(1, epochs+1):
             print(f"Epoch {epoch}")
@@ -74,7 +76,7 @@ class Trainer:
 
 
             if epoch % validate_every == 0:
-                val_mean_ranks.append(self.validate_model(epoch, non_train_batch_size))
+                val_mean_ranks.append(self.validate_model(epoch, val_batch_size))
     
                 # Start checking after accumulate more than val mean rank
                 if len(val_mean_ranks) >= early_stopping and np.argmin(val_mean_ranks[-early_stopping:]) == 0:
@@ -90,11 +92,25 @@ class Trainer:
 
 
 
-    def validate_model(self, epoch, non_train_batch_size):
+    def validate_model(self, epoch, batch_size):
         """
+        Test model on validation and log to tensorboard
+
+        Args:
+            epoch:
+                Current training epoch
+            batch_size:
+                Batch size used for testing
+
+        Return:
+            mean vrank on validation set
         """
-        dataloader = torch.utils.data.DataLoader(self.data['validation'], batch_size=non_train_batch_size)
-        mr, mrr, hits_at_1, hits_at_3, hits_at_10 = evaluate_model(self.model, dataloader, self.data)
+        dataloader = torch.utils.data.DataLoader(
+                        TestDataset(self.data.dataset_name, self.data.valid_triplets, self.data.all_triplets, self.data.num_entities), 
+                        batch_size=batch_size,
+                        num_workers=8
+                    )
+        mr, mrr, hits_at_1, hits_at_3, hits_at_10 = evaluate_model(self.model, dataloader)
 
         # Only save when we know the model performs better
         self.writer.add_scalar('Hits@1%' , hits_at_1, epoch)
@@ -119,7 +135,7 @@ class Trainer:
         corrupted_triplets = copy.deepcopy(triplets)
 
         for i, t in enumerate(triplets):
-            head_tail = choice([0, 2])
+            head_tail = random.choice([0, 2])
             corrupted_triplets[i][head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
 
         return corrupted_triplets

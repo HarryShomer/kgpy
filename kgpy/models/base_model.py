@@ -14,16 +14,17 @@ else:
 
 class Model(ABC, nn.Module):
 
-    def __init__(self, model_name, entities, relations, latent_dim, loss_margin, l2, l3, init_weight_range):
+    def __init__(self, model_name, entities, relations, latent_dim, loss_margin, l2, l3, weight_init):
         super(Model, self).__init__()
         
         self.name = model_name
         self.dim = latent_dim
+        self.weight_init = "xavier" if weight_init is None else weight_init.lower()
 
         self.entities = entities
         self.relations = relations
 
-        self.entity_embeddings, self.relation_embeddings = self._init_weights(init_weight_range)
+        self.entity_embeddings, self.relation_embeddings = self._init_weights()
         self.relation_embeddings = self.relation_embeddings.to(device)
 
         self.l2 = l2   # L2 Regularization applied to loss (fed to optimizer)
@@ -47,51 +48,25 @@ class Model(ABC, nn.Module):
         pass
 
 
-    def _create_weight_init_range(self, init_weight_range):
+
+    def _init_weights(self):
         """
-        If a weight range is give use that. Otherwise default to xavier.
+        Initialize the entity and relation embeddings. Initializer determined by self.weight_init
 
-        Always assume uniform. Also if invalid range use xavier.
-
-        Args:
-            init_weight_range: Range given by user. Should be a iterable with 2 elements
-
-        Return:
-            List with to elements of range
-        """
-        xavier = [- 6 / np.sqrt(self.dim), 6 / np.sqrt(self.dim)]
-
-        if not isinstance(init_weight_range, list) or len(init_weight_range) == 0:
-            return xavier 
-        elif len(init_weight_range) != 2:
-            print(f"Invalid weight range given for weights {init_weight_range}. Defaulting to xavier init.")
-            return xavier
-        else:
-            return init_weight_range
-
-
-
-    def _init_weights(self, init_weight_range):
-        """
-        Initialize the entity and relation embeddings. Range if uniform btwn +/- 6/sqrt(dim).
-
-        Also divide each by relation embedding norm as specified in paper.
-
-        Args:
-            init_weight_range: Range supplied by user. See function self._create_weight_init_range for more details.
+        Also divide each by relation embedding by norm.
 
         Returns:
             Tuple of both nn.Embedding objects
         """
         entity_embeddings = nn.Embedding(len(self.entities), self.dim)
         relation_embeddings = nn.Embedding(len(self.relations), self.dim)
-        
-        weight_range = self._create_weight_init_range(init_weight_range)
-        nn.init.uniform_(entity_embeddings.weight, weight_range[0], weight_range[1])
-        nn.init.uniform_(relation_embeddings.weight, weight_range[0], weight_range[1])
 
+        weight_init_method = self._weight_init_method()
+        weight_init_method(entity_embeddings.weight)
+        weight_init_method(relation_embeddings.weight)
+        
         # TODO: L1 or L2??
-        relation_embeddings.weight.data = self.normalize(relation_embeddings, 1)
+        relation_embeddings.weight.data = self._normalize(relation_embeddings, 1)
 
         return entity_embeddings, relation_embeddings
 
@@ -112,7 +87,7 @@ class Model(ABC, nn.Module):
         Return:
             Return loss
         """
-        self.entity_embeddings.weight.data = self.normalize(self.entity_embeddings, 2)
+        self.entity_embeddings.weight.data = self._normalize(self.entity_embeddings, 2)
 
         positive_scores = self.score_function(triplets)
         negative_scores = self.score_function(corrupted_triplets)
@@ -132,7 +107,7 @@ class Model(ABC, nn.Module):
             Loss
         """
         if self.l3 > 0.0:
-            reg = self.l3_regularization()
+            reg = self._l3_regularization()
         else:
             reg = 0
 
@@ -140,7 +115,7 @@ class Model(ABC, nn.Module):
         return self.loss_function(positive_scores, negative_scores, target) + reg
 
 
-    def normalize(self, embedding, p):
+    def _normalize(self, embedding, p):
         """
         Normalize an embedding by some p-norm.
 
@@ -154,10 +129,26 @@ class Model(ABC, nn.Module):
         return embedding.weight.data / embedding.weight.data.norm(p=p, dim=1, keepdim=True)
 
 
-    def l3_regularization(self):
+    def _l3_regularization(self):
         """
         Commonly used for DistMult.
 
         See here for some l3_Weight by dataset - https://github.com/DeepGraphLearning/KnowledgeGraphEmbedding/blob/master/best_config.sh
         """
         return self.l3 * (self.entity_embeddings.weight.norm(p = 3)**3 + self.relation_embeddings.weight.norm(p = 3)**3) 
+
+
+
+    def _weight_init_method(self):
+        """
+        Determine the correct weight initializer method.
+
+        Returns:
+            Correct nn.init function
+        """
+        if self.weight_init == "normal":
+            return nn.init.normal_
+        elif self.weight_init == "xavier":
+            return nn.init.xavier_uniform_
+
+        raise ValueError(f"Invalid weight initializer passed {self.weight_init}. Must be either 'xavier' or 'normal'.")

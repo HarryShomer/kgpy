@@ -1,27 +1,28 @@
 import os
 import json
-import numpy as np 
 import torch
+import random
+import numpy as np 
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "kg_datasets")
 
+if torch.cuda.is_available():  
+  device = "cuda" 
+else:  
+  device = "cpu"
 
 
-class CustomDataset(torch.utils.data.Dataset):
+
+class TrainDataset(torch.utils.data.Dataset):
     """
     Extend torch.utils.data.Dataset.
 
     Loads a given split for a data set (e.g. training data)
     """
 
-    def __init__(self, dataset_name, data_split, entity2idx, relation2idx, relation_pos="middle"):
+    def __init__(self, dataset_name, triplets):
         self.dataset_name = dataset_name
-        self.data_split = data_split
-
-        self.entity2idx, self.relation2idx = entity2idx, relation2idx
-        self.triplets = self._load_triplets(data_split, relation_pos)
-
-        #print(len(entity2idx), len(relation2idx), len(self.triplets))
+        self.triplets = triplets
 
 
     def __len__(self):
@@ -35,34 +36,58 @@ class CustomDataset(torch.utils.data.Dataset):
         """
         Get indicies for the ith triplet
         """
-        t = self.triplets[index]
-
-        return int(self.entity2idx[t[0]]), int(self.relation2idx[t[1]]), int(self.entity2idx[t[2]])
+        return self.triplets[index][0], self.triplets[index][1], self.triplets[index][2]
 
 
-    def _load_triplets(self, data_split, triplet_order):
+
+class TestDataset(torch.utils.data.Dataset):
+
+    def __init__(self, dataset_name, triplets, all_triplets, num_entities):
+        self.dataset_name = dataset_name
+
+        self.triplets = triplets
+        self.num_entities = num_entities
+
+        self.all_triplets = {t: True for t in all_triplets}
+
+
+    def __len__(self):
         """
-        Load the triplets for a given dataset and data split.
-
-        Args:
-            data_split: Which split of the data to load (train/test/validation)
-            relation_pos: Where the relation is one each line. Either "middle" or "end"
-
-        Returns:
-            list: Triplets
+        Length of dataset
         """
-        triplets = []
+        return len(self.triplets)
 
-        with open(os.path.join(DATA_DIR, self.dataset_name, f"{data_split}.txt"), "r") as file:
-            for line in file:
-                line_components = [l.strip() for l in line.split()]
 
-                if triplet_order.lower() == "middle":
-                    triplets.append(line_components)
-                else:
-                    triplets.append([line_components[0], line_components[2], line_components[1]])
+    def __getitem__(self, index):
+        """
+        Override prev implementation to help with filtered metrics
 
-        return triplets
+        Add dimension to triplet to indicate whether it is a true triplet or not.
+
+        True is denoted by 0 and False by 1
+        """
+        corrupted_head_triplets = []
+        corrupted_tail_triplets = []
+        head, relation, tail = self.triplets[index]
+
+        for e in range(self.num_entities):
+            corrupt_head = (e, relation, tail)
+            corrupt_tail = (head, relation, e)
+
+            corrupt_head_bit = (e, relation, tail) != self.triplets[index]
+            corrupt_tail_bit = (e, relation, tail) != self.triplets[index]
+            # corrupt_head_bit = int(self.all_triplets.get(corrupt_head) is None)
+            # corrupt_tail_bit = int(self.all_triplets.get(corrupt_tail) is None)
+
+            corrupted_head_triplets.append(corrupt_head + (corrupt_head_bit,))
+            corrupted_tail_triplets.append(corrupt_tail + (corrupt_tail_bit,))
+
+        # Why am i doing this?
+        random.shuffle(corrupted_head_triplets)
+        random.shuffle(corrupted_tail_triplets)
+
+        return torch.LongTensor(self.triplets[index]), torch.LongTensor(corrupted_head_triplets), torch.LongTensor(corrupted_tail_triplets)
+
 
 
 class AllDataSet():
@@ -72,13 +97,14 @@ class AllDataSet():
 
     def __init__(self, dataset_name, relation_pos="middle"):
         self.dataset_name = dataset_name
+        self.relation_pos = relation_pos
 
         self.entity2idx, self.relation2idx = self._load_mapping()
         self.entities, self.relations = list(set(self.entity2idx)), list(set(self.relation2idx))
 
-        self.train = CustomDataset(dataset_name, "train", self.entity2idx, self.relation2idx, relation_pos)
-        self.validation = CustomDataset(dataset_name, "valid", self.entity2idx, self.relation2idx, relation_pos)
-        self.test = CustomDataset(dataset_name, "test", self.entity2idx, self.relation2idx, relation_pos)
+        self.train_triplets = self._load_triplets("train")
+        self.valid_triplets = self._load_triplets("valid")
+        self.test_triplets = self._load_triplets("test")
 
 
     @property
@@ -89,6 +115,10 @@ class AllDataSet():
     def num_relations(self):
         return len(self.relations)
 
+    @property
+    def all_triplets(self):
+        return list(set(self.train_triplets + self.valid_triplets + self.test_triplets))
+    
 
     def __getitem__(self, key):
         """
@@ -114,28 +144,43 @@ class AllDataSet():
         with open(os.path.join(DATA_DIR, self.dataset_name, "entity2id.txt"), "r") as f:
             for line in f:
                 line_components = [l.strip() for l in line.split()]
-                entity2idx[line_components[0]] = line_components[1]
+                entity2idx[line_components[0]] = int(line_components[1])
 
         with open(os.path.join(DATA_DIR, self.dataset_name, "relation2id.txt"), "r") as f:
             for line in f:
                 line_components = [l.strip() for l in line.split()]
-                relation2idx[line_components[0]] = line_components[1]
+                relation2idx[line_components[0]] = int(line_components[1])
 
         return entity2idx, relation2idx
 
 
-    def all_triplets(self):
+
+    def _load_triplets(self, data_split):
         """
-        Get all the index triplets across all the sets
+        Load the triplets for a given dataset and data split.
+
+        Use mapping IDs to represent triplet components
+
+        Args:
+            data_split: Which split of the data to load (train/test/validation)
 
         Returns:
-            List of triplets
+            list of tuples: Triplets
         """
-        trip = [self.train[i] for i in range(len(self.train))]
-        trip += [self.validation[i] for i in range(len(self.validation))]
-        trip += [self.test[i] for i in range(len(self.test))]
+        triplets = []
 
-        return trip
+        with open(os.path.join(DATA_DIR, self.dataset_name, f"{data_split}.txt"), "r") as file:
+            for line in file:
+                fields = [l.strip() for l in line.split()]
+
+                if self.relation_pos.lower() == "middle":
+                    triplets.append((self.entity2idx[fields[0]], self.relation2idx[fields[1]], self.entity2idx[fields[2]]))
+                else:
+                    triplets.append((self.entity2idx[fields[0]], self.relation2idx[fields[2]], self.entity2idx[fields[1]]))
+
+        return triplets
+
+
 
 
 #######################################################
