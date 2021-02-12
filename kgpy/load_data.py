@@ -75,7 +75,7 @@ class TestDataset(torch.utils.data.Dataset):
             corrupt_tail = (head, relation, e)
 
             corrupt_head_bit = (e, relation, tail) != self.triplets[index]
-            corrupt_tail_bit = (e, relation, tail) != self.triplets[index]
+            corrupt_tail_bit = (head, relation, e) != self.triplets[index]
             # corrupt_head_bit = int(self.all_triplets.get(corrupt_head) is None)
             # corrupt_tail_bit = int(self.all_triplets.get(corrupt_tail) is None)
 

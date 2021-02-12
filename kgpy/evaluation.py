@@ -92,7 +92,7 @@ def hit_at_k(batch_scores, k):
     return hits
 
 
-
+# TODO: DOES NOT WORK WITH A BATCH SIZE > 1 !!!!!!!
 def evaluate_model(model, data):
     """
     Evaluate the model on a given set of data. Return the relevant metrics
@@ -125,10 +125,12 @@ def evaluate_model(model, data):
             num_corrupt_head = torch.sum(corrupted_head_triplets[:,:,3] != 0, dim=1).tolist()
             num_corrupt_tail = torch.sum(corrupted_tail_triplets[:,:,3] != 0, dim=1).tolist()
 
+
             # Filter out true triplets
             # Can then get rid of indicator (4th dim in triplet)
             corrupted_head_triplets = corrupted_head_triplets[corrupted_head_triplets[:,:,3] != 0][:, :3]
             corrupted_tail_triplets = corrupted_tail_triplets[corrupted_tail_triplets[:,:,3] != 0][:, :3]
+
 
             head_scores = model.score_function(corrupted_head_triplets)
             tail_scores = model.score_function(corrupted_tail_triplets)

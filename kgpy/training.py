@@ -25,7 +25,7 @@ class Trainer:
         self.log_every_n_steps = log_every_n_steps
 
 
-    def train(self, epochs, train_batch_size, validate_every=5, val_batch_size=16, early_stopping=5, save_every=25):
+    def train(self, epochs, train_batch_size, validate_every=5, val_batch_size=1, early_stopping=5, save_every=25, negative_samples=2):
         """
         Train and validate the model
 
@@ -62,6 +62,9 @@ class Trainer:
 
                 triplets = torch.stack((batch_heads, batch_relations, batch_tails), dim=1)
                 corrupted_triplets = self.corrupt_triplets(triplets)
+
+                # corrupted_triplets = self.corrupt_triplets(triplets, negative_samples)
+                # triplets =  triplets.repeat(negative_samples, 1)
 
                 self.optimizer.zero_grad()
 
@@ -103,7 +106,7 @@ class Trainer:
                 Batch size used for testing
 
         Return:
-            mean vrank on validation set
+            mean rank on validation set
         """
         dataloader = torch.utils.data.DataLoader(
                         TestDataset(self.data.dataset_name, self.data.valid_triplets, self.data.all_triplets, self.data.num_entities), 
@@ -122,13 +125,39 @@ class Trainer:
         return mr
 
 
+    # def corrupt_triplets(self, triplets, negative_samples):
+    #     """
+    #     Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
+
+    #     Args:
+    #         triplets: list of triplet to corrupt 
+
+    #     Returns:
+    #         Corrupted Triplets
+    #     """
+    #     corrupted_triplets = []
+
+
+    #     for _ in range(negative_samples):
+
+    #         for i, t in enumerate(triplets):
+            
+    #             new_triplet = copy.deepcopy(t)
+    #             head_tail = random.choice([0, 2])
+    #             new_triplet[head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
+                
+    #             corrupted_triplets.append(new_triplet)
+
+
+    #     return torch.stack(corrupted_triplets, dim=0)
+
+
+
     def corrupt_triplets(self, triplets):
         """
         Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
-
         Args:
             triplets: list of triplet to corrupt 
-
         Returns:
             Corrupted Triplets
         """

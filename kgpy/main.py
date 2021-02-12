@@ -26,7 +26,7 @@ else:
 EPOCHS = 500
 TRAIN_BATCH_SIZE = 128
 TEST_VAL_BATCH_SIZE = 1
-LEARNING_RATE = 0.00025
+LEARNING_RATE = 0.0005
 EVERY_N_EPOCHS_VAL = 5    # Test on validation set every N epochs
 EVERY_N_STEPS_TRAIN = 25  # Write training loss to tensorboard every N steps
 LAST_N_VAL = 5            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
@@ -89,16 +89,16 @@ def main():
     #data = load_data.FB15k_237()
     data = load_data.WN18RR()
 
-    model = models.DistMult(data.entities, data.relations, l3=1e-6, latent_dim=156)
-    #model = models.TransE(data.entities, data.relations, latent_dim=256)
+    #model = models.DistMult(data.entities, data.relations, l3=5e-6, latent_dim=156)
+    model = models.TransE(data.entities, data.relations, latent_dim=100)
 
     model = model.to(device)
 
+    #optimizer = torch.optim.SGD(model.parameters(), lr=5e-4)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
 
-    #run_model(model, optimizer, data)
-    test_diff_models(model, optimizer, data)
-
+    run_model(model, optimizer, data)
+    #test_diff_models(model, optimizer, data)
 
 
 

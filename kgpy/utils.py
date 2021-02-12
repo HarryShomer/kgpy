@@ -1,6 +1,6 @@
 import os
 import torch
-from random import randint
+import random
 
 CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints")
 
@@ -66,7 +66,25 @@ def randint_exclude(begin, end, exclude):
         randint not in exclude
     """
     while True:
-        x = randint(begin, end-1)
+        x = random.randint(begin, end-1)
 
         if x != exclude:
             return x
+
+
+def sample_exclude(begin, end, k, exclude):
+    """
+    Sample k from list but exclude a number
+
+    Args:
+        begin: begin of range
+        end: end of range (exclusive)
+        k: Number of samples to draw
+        exclude: number to exclude
+
+    Returns: list
+        samples chosen
+    """
+    sample_nums = [i for i in range(0, end+1) if i != exclude]
+    
+    return random.sample(sample_nums, k)
