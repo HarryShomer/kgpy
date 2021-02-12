@@ -18,11 +18,16 @@ else:
   device = "cpu"
 
 
+#parser = argparse.ArgumentParser(description='')
+#parser.add_argument('-t', "--reportType", help='Type of report to scrape. Either game or schedule.', default='game', type=str, required=False)  
+#parser.add_argument("--shifts", help='Whether to include shifts.', action='store_true', default=False, required=False)
+
+
 # Constants
 EPOCHS = 500
 TRAIN_BATCH_SIZE = 128
 TEST_VAL_BATCH_SIZE = 16
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
 EVERY_N_EPOCHS_VAL = 5    # Test on validation set every N epochs
 EVERY_N_STEPS_TRAIN = 25  # Write training loss to tensorboard every N steps
 LAST_N_VAL = 5            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
@@ -38,11 +43,11 @@ def test_diff_models(model, optimizer, data):
     """
     model, optimizer = utils.load_model(model, optimizer, data.dataset_name)
     
-    print(f"\nTest Results - Last Saved:")
-    test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
+    # print(f"\nTest Results - Last Saved:")
+    # evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
     # Now let's see how they did by epoch
-    for i in range(50, 1050, 50):
+    for i in range(25, 1050, 50):
         if not utils.checkpoint_exists(model.name, data.dataset_name, epoch=i):
             print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
             continue
@@ -82,16 +87,11 @@ def run_model(model, optimizer, data):
   
 
 def main():
-
-    #parser = argparse.ArgumentParser(description='')
-    #parser.add_argument('-t', "--reportType", help='Type of report to scrape. Either game or schedule.', default='game', type=str, required=False)  
-    #parser.add_argument("--shifts", help='Whether to include shifts.', action='store_true', default=False, required=False)
-
     #data = load_data.FB15k_237()
     data = load_data.WN18RR()
 
-    #model = models.DistMult(data.entities, data.relations)
-    model = models.TransE(data.entities, data.relations)
+    #model = models.DistMult(data.entities, data.relations, l2=5e-6, latent_dim=156)
+    model = models.TransE(data.entities, data.relations, latent_dim=256)
 
     model = model.to(device)
 

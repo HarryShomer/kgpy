@@ -61,7 +61,7 @@ def mean_reciprocal_rank(scores, true_entities):
     rank_true_entities = torch.where(ranked_scores == true_entities)
     
     # Add constant to denominator for div/0
-    rank_true_entities_no_zero = torch.Tensor([i if i != 0 else torch.tensor(1) for i in rank_true_entities[1]])
+    rank_true_entities_no_zero = rank_true_entities[1] + 1
 
     return torch.mean(1.0 / rank_true_entities_no_zero).item()
 
@@ -127,7 +127,7 @@ def evaluate_model(model, data, all_dataset):
         # Calc metrics
         ################
         num_batches += 1
-        total_samples += batch_size
+        total_samples += all_scores.size()[0]
 
         # Mean Ranks
         mr += mean_rank(all_scores, true_entities)
@@ -166,6 +166,6 @@ def test_model(model, data, batch_size):
     Returns:
         Tuple of (mean-rank, mean-recipocal-rank, hits_at_1, hits_at_3, hits_at_10)
     """
-    dataloader = torch.utils.data.DataLoader(self.data['test'], batch_size=batch_size)
+    dataloader = torch.utils.data.DataLoader(data['test'], batch_size=batch_size)
 
-    return evaluate_model(self.model, dataloader, self.data)
+    return evaluate_model(model, dataloader, data)

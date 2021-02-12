@@ -53,7 +53,7 @@ def checkpoint_exists(model_name, dataset_name, epoch=None):
     return os.path.isfile(file_path)
 
 
-def randint_exclude(self, begin, end, exclude):
+def randint_exclude(begin, end, exclude):
     """
     Randint but exclude a number
 

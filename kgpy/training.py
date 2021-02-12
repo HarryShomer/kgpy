@@ -2,6 +2,7 @@ import os
 import copy
 import numpy as np
 import torch
+import random
 from torch.utils import tensorboard
 from torch.utils.tensorboard import SummaryWriter
 
@@ -25,7 +26,7 @@ class Trainer:
         self.log_every_n_steps = log_every_n_steps
 
 
-    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=50):
+    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25):
         """
         Train and validate the model
 
@@ -119,7 +120,7 @@ class Trainer:
         corrupted_triplets = copy.deepcopy(triplets)
 
         for i, t in enumerate(triplets):
-            head_tail = choice([0, 2])
+            head_tail = random.choice([0, 2])
             corrupted_triplets[i][head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
 
         return corrupted_triplets

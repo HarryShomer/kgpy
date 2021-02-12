@@ -17,20 +17,17 @@ else:
 
 class TransE(base_model.Model):
 
-    def __init__(self, entities, relations, latent_dim=100, loss_margin=1, l2=0, l3=0.0, init_weight_range=[], norm=2):
-        super().__init__("TransE", entities, relations, latent_dim, loss_margin, l2, l3, init_weight_range)
+    def __init__(self, entities, relations, latent_dim=100, margin=1, l2=0, l3=0.0, weight_init=None, norm=2):
+        super().__init__("TransE", entities, relations, latent_dim, margin, l2, l3, weight_init)
         self.norm = norm
         
 
     def score_function(self, triplets):
         """
         Get the score for a given set of triplets.
-
         Negate score so that lower distances which indicates a better fit score higher than higher distances
-
         Args:
             triplets: List of triplets
-
         Returns:
             List of scores
         """
