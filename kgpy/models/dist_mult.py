@@ -16,8 +16,28 @@ else:
 
 
 class DistMult(base_model.Model):
-    def __init__(self, entities, relations, latent_dim=100, margin=1, l2=0, l3=0.00001, weight_init=None):
-        super().__init__("DistMult", entities, relations, latent_dim, margin, l2, l3, weight_init)
+    def __init__(self, 
+        entities, 
+        relations, 
+        latent_dim=100, 
+        margin=1, 
+        regularization = 'l3',
+        reg_weight = 1e-6,
+        weight_init=None,
+        loss_fn="ranking"
+    ):
+        super().__init__(
+            "DistMult", 
+            entities, 
+            relations, 
+            latent_dim, 
+            margin, 
+            regularization,
+            reg_weight,
+            weight_init, 
+            loss_fn,
+            True
+        )
         
 
     def score_function(self, triplets):

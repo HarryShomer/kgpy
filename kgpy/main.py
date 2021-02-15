@@ -43,11 +43,11 @@ def test_diff_models(model, optimizer, data):
     """
     model, optimizer = utils.load_model(model, optimizer, data.dataset_name)
     
-    # print(f"\nTest Results - Last Saved:")
-    # evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
+    print(f"\nTest Results - Last Saved:")
+    evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
     # Now let's see how they did by epoch
-    for i in range(25, 1050, 50):
+    for i in range(25, 1050, 25):
         if not utils.checkpoint_exists(model.name, data.dataset_name, epoch=i):
             print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
             continue
@@ -87,16 +87,16 @@ def run_model(model, optimizer, data):
   
 
 def main():
-    #data = load_data.FB15k_237()
-    data = load_data.WN18RR()
+    data = load_data.FB15k_237()
+    #data = load_data.WN18RR()
 
-    #model = models.DistMult(data.entities, data.relations, l2=5e-6, latent_dim=156)
-    model = models.TransE(data.entities, data.relations, latent_dim=256)
+    #model = models.TransE(data.entities, data.relations, latent_dim=200)
+    #model = models.DistMult(data.entities, data.relations, regularization='l3', reg_weight=1e-6, latent_dim=200)
+    model = models.ComplEx(data.entities, data.relations, regularization='l2', reg_weight=[1e-6, 5e-15])
 
     model = model.to(device)
 
-    #optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=model.l2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     run_model(model, optimizer, data)
     #test_diff_models(model, optimizer, data)

@@ -7,6 +7,7 @@ CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..",
 
 def save_model(model, optimizer, epoch, step, dataset_name, suffix=""):
     """
+    Save the given model's state
     """
     suffix = "_" + str(suffix) if len(str(suffix)) > 0 else str(suffix)
 
@@ -16,6 +17,10 @@ def save_model(model, optimizer, epoch, step, dataset_name, suffix=""):
     torch.save({
         "model_state_dict": model.state_dict(),
         "optimizersstate_dict": optimizer.state_dict(),
+        "latent_dim": model.dim,
+        "loss_fn": model.loss_fn_name,
+        "regularization": model.regularization,
+        "reg_weight": model.reg_weight,
         "epoch": epoch,
         "step": step
     }, os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}{suffix}.tar"))

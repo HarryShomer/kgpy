@@ -17,8 +17,30 @@ else:
 
 class TransE(base_model.Model):
 
-    def __init__(self, entities, relations, latent_dim=100, margin=1, l2=0, l3=0.0, weight_init=None, norm=2):
-        super().__init__("TransE", entities, relations, latent_dim, margin, l2, l3, weight_init)
+    def __init__(
+        self, 
+        entities, 
+        relations, 
+        latent_dim=100, 
+        margin=1, 
+        regularization = None,
+        reg_weight = 0,
+        weight_init=None, 
+        norm=2,
+        loss_fn="ranking"
+    ):
+        super().__init__(
+            "TransE", 
+            entities, 
+            relations, 
+            latent_dim, 
+            margin, 
+            regularization,
+            reg_weight,
+            weight_init, 
+            loss_fn,
+            True
+        )
         self.norm = norm
         
 
