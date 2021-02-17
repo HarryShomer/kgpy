@@ -99,7 +99,7 @@ def run_model(model, optimizer, data):
   
 
 def main():
-    data = getattr(load_data, args.dataset)()
+    data = getattr(load_data, args.dataset.upper())()
 
     model_name = args.model.lower()
 
@@ -107,7 +107,7 @@ def main():
     if model_name == "transe":
         model = models.TransE(data.entities, data.relations, latent_dim=200)
     if model_name == "distmult":
-        model = models.DistMult(data.entities, data.relations, regularization='l3', reg_weight=1e-6, latent_dim=200)
+        model = models.DistMult(data.entities, data.relations, regularization='l3', reg_weight=[1e-10, 1e-15], latent_dim=256)
     if model_name == "complex":  
         model = models.ComplEx(data.entities, data.relations, regularization='l2', reg_weight=[1e-6, 5e-15])
 

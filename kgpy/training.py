@@ -33,7 +33,7 @@ class Trainer:
             self.writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
 
 
-    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25):
+    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25, negative_samples=5):
         """
         Train and validate the model
 
@@ -50,6 +50,8 @@ class Trainer:
                 Stop training if the mean rank hasn't improved in last "n" validation scores. Defaults to 5
             save_Every: 
                 Save model every "n" epochs. Defaults to 50
+            negative_samples:
+                Number of negative samples to generate for each training sample
 
         Returns:
             None
@@ -67,7 +69,13 @@ class Trainer:
                 batch_heads, batch_relations, batch_tails = batch[0].to(device), batch[1].to(device), batch[2].to(device)
 
                 triplets = torch.stack((batch_heads, batch_relations, batch_tails), dim=1)
-                corrupted_triplets = self.corrupt_triplets(triplets)
+                
+                #corrupted_triplets = self.corrupt_triplets(triplets)
+
+
+                corrupted_triplets = self.corrupt_triplets(triplets, negative_samples)
+                triplets =  triplets.repeat(negative_samples, 1)
+
 
                 self.optimizer.zero_grad()
 
@@ -115,27 +123,7 @@ class Trainer:
         return mr
 
 
-    def corrupt_triplets(self, triplets):
-        """
-        Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
-
-        Args:
-            triplets: list of triplet to corrupt 
-
-        Returns:
-            Corrupted Triplets
-        """
-        corrupted_triplets = copy.deepcopy(triplets)
-
-        for i, t in enumerate(triplets):
-            head_tail = random.choice([0, 2])
-            corrupted_triplets[i][head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
-
-        return corrupted_triplets
-
-
-
-    # def corrupt_triplets(self, triplets, negative_samples):
+    # def corrupt_triplets(self, triplets):
     #     """
     #     Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
 
@@ -145,18 +133,38 @@ class Trainer:
     #     Returns:
     #         Corrupted Triplets
     #     """
-    #     corrupted_triplets = []
+    #     corrupted_triplets = copy.deepcopy(triplets)
+
+    #     for i, t in enumerate(triplets):
+    #         head_tail = random.choice([0, 2])
+    #         corrupted_triplets[i][head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
+
+    #     return corrupted_triplets
 
 
-    #     for _ in range(negative_samples):
 
-    #         for i, t in enumerate(triplets):
+    def corrupt_triplets(self, triplets, negative_samples):
+        """
+        Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
+
+        Args:
+            triplets: list of triplet to corrupt 
+
+        Returns:
+            Corrupted Triplets
+        """
+        corrupted_triplets = []
+
+
+        for _ in range(negative_samples):
+
+            for i, t in enumerate(triplets):
             
-    #             new_triplet = copy.deepcopy(t)
-    #             head_tail = random.choice([0, 2])
-    #             new_triplet[head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
+                new_triplet = copy.deepcopy(t)
+                head_tail = random.choice([0, 2])
+                new_triplet[head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
                 
-    #             corrupted_triplets.append(new_triplet)
+                corrupted_triplets.append(new_triplet)
 
 
-    #     return torch.stack(corrupted_triplets, dim=0)
+        return torch.stack(corrupted_triplets, dim=0)
