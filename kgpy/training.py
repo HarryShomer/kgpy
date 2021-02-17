@@ -90,11 +90,11 @@ class Trainer:
                     break
 
                 # Only save when we know the model performs better
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, checkpoint_dir)
+                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, self.checkpoint_dir)
 
 
             if epoch % save_every == 0:
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, checkpoint_dir, suffix=f"epoch_{epoch}")
+                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, self.checkpoint_dir, suffix=f"epoch_{epoch}")
 
 
 
