@@ -3,7 +3,6 @@ import torch
 import argparse
 import numpy as np 
 from torch.utils import tensorboard
-from torch.utils.tensorboard import SummaryWriter
 
 import utils
 import models
@@ -18,21 +17,36 @@ else:
   device = "cpu"
 
 
-#parser = argparse.ArgumentParser(description='')
-#parser.add_argument('-t', "--reportType", help='Type of report to scrape. Either game or schedule.', default='game', type=str, required=False)  
-#parser.add_argument("--shifts", help='Whether to include shifts.', action='store_true', default=False, required=False)
+parser = argparse.ArgumentParser(description='KG model and params to run')
+parser.add_argument("model", help="Model to run")
+parser.add_argument("dataset", help="Dataset to run it on")
+parser.add_argument("--epochs", help="Number of epochs to run", default=500)
+parser.add_argument("--batch-size", help="Batch size to use for training", default=128)
+parser.add_argument("--learning-rate", help="Learning rate to use while training", default=.0001)
+parser.add_argument("--validation", help="Test on validation set every n epochs", type=int, default=5)
+parser.add_argument("--early-stopping", help="Number of validation scores to wait for an increase before stopping", default=5)
+parser.add_argument("--checkpoint-dir", help="Directory to store model checkpoints", default=os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints"))
+parser.add_argument("--tensorboard", help="Whether to log to tensorboard", action='store_true', default=False, required=False)
+
+## TODO:
+# latent_dim
+# regularization
+# loss_fn
+
+args = parser.parse_args()
 
 
 # Constants
-EPOCHS = 500
-TRAIN_BATCH_SIZE = 128
-TEST_VAL_BATCH_SIZE = 16
-LEARNING_RATE = 0.0001
-EVERY_N_EPOCHS_VAL = 5    # Test on validation set every N epochs
+EPOCHS = args.epochs
+TRAIN_BATCH_SIZE = args.batch_size
+LEARNING_RATE = args.learning_rate
+EVERY_N_EPOCHS_VAL = args.validation   
+LAST_N_VAL = args.early_stopping            
+TEST_VAL_BATCH_SIZE = 16  # Batch size for test and validation testing
 EVERY_N_STEPS_TRAIN = 25  # Write training loss to tensorboard every N steps
-LAST_N_VAL = 5            # Compare validation metric to last N scores. If it hasn't decreased in that time we stop training.
     
-TENSORBOARD_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "runs")
+CHECKPOINT_DIR = args.checkpoint_dir  
+
 
 
 def test_diff_models(model, optimizer, data):
@@ -75,9 +89,7 @@ def run_model(model, optimizer, data):
     Returns:
         None
     """
-    tensorboard_writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
-
-    model_trainer = Trainer(model, optimizer, data, tensorboard_writer)
+    model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
     model_trainer.train(EPOCHS, TRAIN_BATCH_SIZE)
 
     print("\nTest Results:")
@@ -87,18 +99,22 @@ def run_model(model, optimizer, data):
   
 
 def main():
-    data = load_data.FB15k_237()
-    #data = load_data.WN18RR()
+    data = getattr(load_data, args.dataset)()
 
-    #model = models.TransE(data.entities, data.relations, latent_dim=200)
-    #model = models.DistMult(data.entities, data.relations, regularization='l3', reg_weight=1e-6, latent_dim=200)
-    model = models.ComplEx(data.entities, data.relations, regularization='l2', reg_weight=[1e-6, 5e-15])
+    model_name = args.model.lower()
+
+    # TODO: Convert to argparse
+    if model_name == "transe":
+        model = models.TransE(data.entities, data.relations, latent_dim=200)
+    if model_name == "distmult":
+        model = models.DistMult(data.entities, data.relations, regularization='l3', reg_weight=1e-6, latent_dim=200)
+    if model_name == "complex":  
+        model = models.ComplEx(data.entities, data.relations, regularization='l2', reg_weight=[1e-6, 5e-15])
 
     model = model.to(device)
-
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
     run_model(model, optimizer, data)
+
     #test_diff_models(model, optimizer, data)
 
 

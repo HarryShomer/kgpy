@@ -16,14 +16,21 @@ else:
   device = "cpu"
 
 
+TENSORBOARD_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "runs")
+
+
 class Trainer:
 
-    def __init__(self, model, optimizer, data, tensorboard_writer, log_every_n_steps=25):
+    def __init__(self, model, optimizer, data, checkpoint_dir, tensorboard=True, log_every_n_steps=25):
         self.model = model
         self.optimizer = optimizer
         self.data = data 
-        self.writer = tensorboard_writer
+        self.checkpoint_dir = checkpoint_dir
         self.log_every_n_steps = log_every_n_steps
+        self.tensorboard = tensorboard
+
+        if tensorboard:
+            self.writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
 
 
     def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25):
@@ -70,7 +77,7 @@ class Trainer:
                 self.optimizer.step()
                 step += 1
 
-                if step % self.log_every_n_steps == 0:
+                if step % self.log_every_n_steps == 0 and self.tensorboard:
                     self.writer.add_scalar(f'training_loss', batch_loss.item(), global_step=step)
 
 
@@ -83,11 +90,11 @@ class Trainer:
                     break
 
                 # Only save when we know the model performs better
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name)
+                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, checkpoint_dir)
 
 
             if epoch % save_every == 0:
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, suffix=f"epoch_{epoch}")
+                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, checkpoint_dir, suffix=f"epoch_{epoch}")
 
 
 
@@ -97,12 +104,13 @@ class Trainer:
         dataloader = torch.utils.data.DataLoader(self.data['validation'], batch_size=non_train_batch_size)
         mr, mrr, hits_at_1, hits_at_3, hits_at_10 = evaluate_model(self.model, dataloader, self.data)
 
-        # Only save when we know the model performs better
-        self.writer.add_scalar('Hits@1%' , hits_at_1, epoch)
-        self.writer.add_scalar('Hits@3%' , hits_at_3, epoch)
-        self.writer.add_scalar('Hits@10%', hits_at_10, epoch)
-        self.writer.add_scalar('MR'      , mr, epoch)
-        self.writer.add_scalar('MRR'     , mrr, epoch)
+        if self.tensorboard:
+            # Only save when we know the model performs better
+            self.writer.add_scalar('Hits@1%' , hits_at_1, epoch)
+            self.writer.add_scalar('Hits@3%' , hits_at_3, epoch)
+            self.writer.add_scalar('Hits@10%', hits_at_10, epoch)
+            self.writer.add_scalar('MR'      , mr, epoch)
+            self.writer.add_scalar('MRR'     , mrr, epoch)
 
         return mr
 
@@ -125,3 +133,30 @@ class Trainer:
 
         return corrupted_triplets
 
+
+
+    # def corrupt_triplets(self, triplets, negative_samples):
+    #     """
+    #     Corrupt list of triplet by randomly replacing either the head or the tail with another entitiy
+
+    #     Args:
+    #         triplets: list of triplet to corrupt 
+
+    #     Returns:
+    #         Corrupted Triplets
+    #     """
+    #     corrupted_triplets = []
+
+
+    #     for _ in range(negative_samples):
+
+    #         for i, t in enumerate(triplets):
+            
+    #             new_triplet = copy.deepcopy(t)
+    #             head_tail = random.choice([0, 2])
+    #             new_triplet[head_tail] = utils.randint_exclude(0, len(self.data.entities), t[head_tail])
+                
+    #             corrupted_triplets.append(new_triplet)
+
+
+    #     return torch.stack(corrupted_triplets, dim=0)

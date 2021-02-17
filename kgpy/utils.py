@@ -2,28 +2,27 @@ import os
 import torch
 from random import randint, choice
 
-CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints")
 
 
-def save_model(model, optimizer, epoch, step, dataset_name, suffix=""):
+def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suffix=""):
     """
     Save the given model's state
     """
     suffix = "_" + str(suffix) if len(str(suffix)) > 0 else str(suffix)
 
-    if not os.path.isdir(os.path.join(CHECKPOINT_DIR, dataset_name)):
-        os.mkdir(os.path.join(CHECKPOINT_DIR, dataset_name))
+    if not os.path.isdir(os.path.join(checkpoint_dir, dataset_name)):
+        os.mkdir(os.path.join(checkpoint_dir, dataset_name))
 
     torch.save({
         "model_state_dict": model.state_dict(),
-        "optimizersstate_dict": optimizer.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
         "latent_dim": model.dim,
         "loss_fn": model.loss_fn_name,
         "regularization": model.regularization,
         "reg_weight": model.reg_weight,
         "epoch": epoch,
         "step": step
-    }, os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}{suffix}.tar"))
+    }, os.path.join(checkpoint_dir, dataset_name, f"{model.name}{suffix}.tar"))
 
 
 def load_model(model, optimizer, dataset_name, epoch=None):
@@ -41,7 +40,7 @@ def load_model(model, optimizer, dataset_name, epoch=None):
 
     checkpoint = torch.load(file_path)
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizersstate_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     return model, optimizer
 
