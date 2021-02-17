@@ -10,6 +10,8 @@ def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suff
     """
     suffix = "_" + str(suffix) if len(str(suffix)) > 0 else str(suffix)
 
+    if not os.path.isdir(checkpoint_dir):
+        os.mkdir(checkpoint_dir)
     if not os.path.isdir(os.path.join(checkpoint_dir, dataset_name)):
         os.mkdir(os.path.join(checkpoint_dir, dataset_name))
 
