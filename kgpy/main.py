@@ -145,7 +145,7 @@ def main():
     model_name = args.model.lower()
     model_params = parse_model_args()
 
-    print(f"\nRunning on {torch.cuda.device_count()} devices!\n")
+    print(f"Model running on {torch.cuda.device_count()} devices!\n")
 
     # TODO: Convert to argparse
     if model_name == "transe":

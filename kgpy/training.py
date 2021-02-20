@@ -67,7 +67,6 @@ class Trainer:
             self.model.train()   # Switch back to train from eval
 
             for batch in train_loader:
-                #print("Queso!")
                 batch_heads, batch_relations, batch_tails = batch[0].to(device), batch[1].to(device), batch[2].to(device)
 
                 triplets = torch.stack((batch_heads, batch_relations, batch_tails), dim=1)
@@ -81,7 +80,7 @@ class Trainer:
                 self.optimizer.zero_grad()
 
                 batch_loss = self.model(triplets, corrupted_triplets)
-                batch_loss.backward()
+                batch_loss.mean().backward()
 
                 self.optimizer.step()
                 step += 1
