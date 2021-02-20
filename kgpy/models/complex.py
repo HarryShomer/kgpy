@@ -5,18 +5,16 @@ See paper for more details - http://proceedings.mlr.press/v48/trouillon16.pdf.
 """
 import torch
 import numpy as np
-from collections.abc import Iterable
 
-from . import base_model
-
-
-if torch.cuda.is_available():  
-  device = "cuda" 
-else:  
-  device = "cpu"
+from .base_model import ComplexEmbeddingModel
 
 
-class ComplEx(base_model.Model):
+class ComplEx(ComplexEmbeddingModel):
+    """
+    For the attributes `entity_embeddings` and `relation_embedding`:
+        - The 0th index holds the real component
+        - The 1st index holds the imaginary component
+    """
 
     def __init__(
         self, 
@@ -25,9 +23,9 @@ class ComplEx(base_model.Model):
         latent_dim=100, 
         margin=1, 
         regularization = 'l2',
-        reg_weight = [1e-6, 5e-15],
+        reg_weight = [5e-6, 5e-10],
         weight_init="normal",
-        loss_fn="ranking" #"cross-entropy"
+        loss_fn= "ranking"  #"softplus"
     ):
         super().__init__(
             "ComplEx", 
@@ -40,9 +38,8 @@ class ComplEx(base_model.Model):
             weight_init, 
             loss_fn,
             True,
-            complex_emb=True
         )
-        
+
 
     def score_function(self, triplets):
         """        
@@ -57,9 +54,12 @@ class ComplEx(base_model.Model):
         Returns:
             List of scores
         """
-        h_re, h_im = self.entity_embeddings(triplets[:, 0])
-        r_re, r_im = self.relation_embeddings(triplets[:, 1])
-        t_re, t_im = self.entity_embeddings(triplets[:, 2])
+        h_re = self.entity_emb_re(triplets[:, 0])
+        h_im = self.entity_emb_im(triplets[:, 0])
+        t_re = self.entity_emb_re(triplets[:, 2])
+        t_im = self.entity_emb_im(triplets[:, 2])
+        r_re = self.relation_emb_re(triplets[:, 1])
+        r_im = self.relation_emb_im(triplets[:, 1])
 
         return torch.sum(
                   (h_re * r_re * t_re) 
@@ -68,34 +68,4 @@ class ComplEx(base_model.Model):
                 - (h_im * r_im * t_re)
                 , dim=-1
             ) 
-
-
-
-    # TODO: Move this to base to account for other models with complex embeddings
-    def _regularization(self):
-        """
-        Apply regularization if specified.
-
-        Note: Override for complex embeddings
-
-        Returns:
-            Regularization term for loss
-        """
-        if self.regularization is None:
-            return 0
-
-        if self.regularization == "l1":
-            lp = 1
-        elif self.regularization == "l2":
-            lp =2
-        else:
-            lp = 3
-
-        entity_re, entity_im = self.entity_embeddings.norm(lp)
-        relation_re, relation_im = self.relation_embeddings.norm(lp)
-
-        if isinstance(self.reg_weight, Iterable):
-            return self.reg_weight[0] * (entity_re**lp + entity_im**lp) + self.reg_weight[1] * (relation_re**lp + relation_im**lp)
-        
-        return self.reg_weight * (entity_re**lp + entity_im**lp + relation_re**lp + relation_im**lp) 
 

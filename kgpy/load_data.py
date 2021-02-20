@@ -143,7 +143,7 @@ class AllDataSet():
 #######################################################
 
 
-class FB15k_237(AllDataSet):
+class FB15K_237(AllDataSet):
     """
     Load the FB15k-237 dataset
     """
@@ -160,7 +160,7 @@ class WN18RR(AllDataSet):
 
 
 
-class FB15k(AllDataSet):
+class FB15K(AllDataSet):
     """
     Load the FB15k dataset
     """

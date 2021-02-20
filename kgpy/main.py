@@ -28,6 +28,7 @@ parser.add_argument("--lp", help="LP regularization penalty to add to loss", typ
 parser.add_argument("--lp-weights", help="LP regularization weights. Can give one or two.", nargs='+', default=None)
 parser.add_argument("--dim", help="Latent dimension of entities and relations", type=int, default=None)
 parser.add_argument("--loss-fn", help="Loss function to use.", default=None)
+parser.add_argument("--negative-samples", help="Number of negative samples to use when training", default=1, type=int)
 
 parser.add_argument("--test-batch-size", help="Batch size to use for testing and validation", default=16, type=int)
 parser.add_argument("--validation", help="Test on validation set every n epochs", type=int, default=5)
@@ -35,6 +36,8 @@ parser.add_argument("--early-stopping", help="Number of validation scores to wai
 parser.add_argument("--checkpoint-dir", help="Directory to store model checkpoints", default=os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints"))
 parser.add_argument("--tensorboard", help="Whether to log to tensorboard", action='store_true', default=False)
 parser.add_argument("--log-training-loss", help="Log training loss every n steps", default=25, type=int)
+
+parser.add_argument("--test-model", help="Evaluate all saved versions of a given model and dataset on the test set", action='store_true', default=False)
 
 ## TODO:
 # margin
@@ -60,22 +63,21 @@ def test_diff_models(model, optimizer, data):
 
     Also test the final main version (likely differs from last epoch version)
     """
-    model, optimizer = utils.load_model(model, optimizer, data.dataset_name)
+    model, optimizer = utils.load_model(model, optimizer, data.dataset_name, CHECKPOINT_DIR)
     
     print(f"\nTest Results - Last Saved:")
     evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
 
     # Now let's see how they did by epoch
     for i in range(25, 1050, 25):
-        if not utils.checkpoint_exists(model.name, data.dataset_name, epoch=i):
+        if not utils.checkpoint_exists(model.name, data.dataset_name, CHECKPOINT_DIR, epoch=i):
             print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
             continue
    
-        model, optimizer = utils.load_model(model, optimizer, data.dataset_name, epoch=i)
+        model, optimizer = utils.load_model(model, optimizer, data.dataset_name, CHECKPOINT_DIR, epoch=i)
 
         print(f"\nTest Results - Epoch {i}:")
         evaluation.test_model(model, data, batch_size=TEST_VAL_BATCH_SIZE)
-
 
 
 
@@ -94,10 +96,17 @@ def run_model(model, optimizer, data):
     Returns:
         None
     """
+    train_keywords = {
+        "validate_every": args.validation, 
+        "non_train_batch_size": args.test_batch_size, 
+        "early_stopping": args.early_stopping, 
+        "negative_samples": args.negative_samples,
+        "save_every": args.log_training_loss
+    }
     model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
-    model_trainer.train(EPOCHS, TRAIN_BATCH_SIZE)
+    model_trainer.train(EPOCHS, TRAIN_BATCH_SIZE, **train_keywords)
 
-    print("\nTest Results:")
+    print("\nTest Results:", flush=True)
     evaluation.test_model(model, data, TEST_VAL_BATCH_SIZE)
 
 
@@ -112,14 +121,13 @@ def parse_model_args():
     """
     model_params = {}
 
-
     if args.lp is not None:
         model_params['regularization'] = f"l{args.lp}"
 
-    if isinstance(args.lp_weights, list):
+    if isinstance(args.lp_weights, list) and len(args.lp_weights) > 1:
         model_params['reg_weight'] = [float(r) for r in args.lp_weights]
-    elif args.lp_weights is not None:
-        model_params['reg_weight'] = float(args.lp_weights)
+    elif isinstance(args.lp_weights, list) and len(args.lp_weights) == 1:
+        model_params['reg_weight'] = float(args.lp_weights[0])
 
     if args.dim is not None:
         model_params['latent_dim'] = args.dim
@@ -130,13 +138,14 @@ def parse_model_args():
     return model_params
   
 
-  
 
 def main():
     data = getattr(load_data, args.dataset.upper())()
 
     model_name = args.model.lower()
     model_params = parse_model_args()
+
+    print(f"\nRunning on {torch.cuda.device_count()} devices!\n")
 
     # TODO: Convert to argparse
     if model_name == "transe":
@@ -146,12 +155,14 @@ def main():
     if model_name == "complex":  
         model = models.ComplEx(data.entities, data.relations, **model_params)
 
-    model = model.to(device)
+    #model = model.to(device)
+    model = utils.DataParallel(model).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    
-    run_model(model, optimizer, data)
 
-    #test_diff_models(model, optimizer, data)
+    if args.test_model:
+        test_diff_models(model, optimizer, data)
+    else:
+        run_model(model, optimizer, data)
 
 
 

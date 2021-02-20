@@ -6,16 +6,10 @@ See paper for more details - https://arxiv.org/pdf/1412.6575.pdf.
 import torch
 import numpy as np
 
-from . import base_model
+from .base_model import SingleEmbeddingModel
 
 
-if torch.cuda.is_available():  
-  device = "cuda" 
-else:  
-  device = "cpu"
-
-
-class DistMult(base_model.Model):
+class DistMult(SingleEmbeddingModel):
     def __init__(self, 
         entities, 
         relations, 
@@ -42,10 +36,11 @@ class DistMult(base_model.Model):
 
     def score_function(self, triplets):
         """
-        Score function is -> h^T *diag(M) * t. We have r = diag(M).
-        his is formulated as the sum of the elementwise product of the embeddings.
+        Score function is -> h^T * diag(M) * t. We have r = diag(M).
+
         Args:
             triplets: List of triplets
+
         Returns:
             List of scores
         """

@@ -33,7 +33,8 @@ class Trainer:
             self.writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
 
 
-    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25, negative_samples=5):
+    def train(self, epochs, train_batch_size, validate_every=5, non_train_batch_size=16, early_stopping=5, save_every=25, negative_samples=5
+        ):
         """
         Train and validate the model
 
@@ -62,16 +63,16 @@ class Trainer:
 
 
         for epoch in range(1, epochs+1):
-            print(f"Epoch {epoch}")
+            print(f"Epoch {epoch}", flush=True)
             self.model.train()   # Switch back to train from eval
 
             for batch in train_loader:
+                #print("Queso!")
                 batch_heads, batch_relations, batch_tails = batch[0].to(device), batch[1].to(device), batch[2].to(device)
 
                 triplets = torch.stack((batch_heads, batch_relations, batch_tails), dim=1)
                 
                 #corrupted_triplets = self.corrupt_triplets(triplets)
-
 
                 corrupted_triplets = self.corrupt_triplets(triplets, negative_samples)
                 triplets =  triplets.repeat(negative_samples, 1)
@@ -79,7 +80,7 @@ class Trainer:
 
                 self.optimizer.zero_grad()
 
-                batch_loss = self.model(triplets.detach(), corrupted_triplets.detach())
+                batch_loss = self.model(triplets, corrupted_triplets)
                 batch_loss.backward()
 
                 self.optimizer.step()
@@ -94,7 +95,7 @@ class Trainer:
     
                 # Start checking after accumulate more than val mean rank
                 if len(val_mean_ranks) >= early_stopping and np.argmin(val_mean_ranks[-early_stopping:]) == 0:
-                    print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!")
+                    print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!", flush=True)
                     break
 
                 # Only save when we know the model performs better

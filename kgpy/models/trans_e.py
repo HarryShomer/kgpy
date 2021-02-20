@@ -6,16 +6,10 @@ See paper for more details - https://papers.nips.cc/paper/2013/file/1cecc7a77928
 import torch
 import numpy as np
 
-from . import base_model
+from .base_model import SingleEmbeddingModel
 
 
-if torch.cuda.is_available():  
-  device = "cuda" 
-else:  
-  device = "cpu"
-
-
-class TransE(base_model.Model):
+class TransE(SingleEmbeddingModel):
 
     def __init__(
         self, 
@@ -48,8 +42,10 @@ class TransE(base_model.Model):
         """
         Get the score for a given set of triplets.
         Negate score so that lower distances which indicates a better fit score higher than higher distances
+
         Args:
             triplets: List of triplets
+        
         Returns:
             List of scores
         """

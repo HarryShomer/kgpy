@@ -146,7 +146,7 @@ def evaluate_model(model, data, all_dataset):
     hits_at_3 = hits_at_3 / total_samples * 100
     hits_at_10 = hits_at_10 / total_samples * 100
 
-    print(f"\nMR: {mr} \nMRR: {mrr} \nHits@1%: {hits_at_1} \nHits@3%: {hits_at_3} \nHits@10%: {hits_at_10}\n")
+    print(f"\nMR: {mr} \nMRR: {mrr} \nHits@1%: {hits_at_1} \nHits@3%: {hits_at_3} \nHits@10%: {hits_at_10}\n", flush=True)
 
     return mr, mrr, hits_at_1, hits_at_3, hits_at_10
 

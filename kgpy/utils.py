@@ -3,6 +3,17 @@ import torch
 from random import randint, choice
 
 
+class DataParallel(torch.nn.DataParallel):
+    """
+    Extend DataParallel class to access model level attributes/methods
+    """
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+
 
 def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suffix=""):
     """
@@ -15,26 +26,34 @@ def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suff
     if not os.path.isdir(os.path.join(checkpoint_dir, dataset_name)):
         os.mkdir(os.path.join(checkpoint_dir, dataset_name))
 
+    # If wrapped in DataParallel object this is how we access the underlying model
+    if isinstance(model, DataParallel):
+        model_obj = model.module
+    else:
+        model_obj = model
+
     torch.save({
-        "model_state_dict": model.state_dict(),
+        "model_state_dict": model_obj.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "latent_dim": model.dim,
-        "loss_fn": model.loss_fn_name,
-        "regularization": model.regularization,
-        "reg_weight": model.reg_weight,
+        "latent_dim": model_obj.dim,
+        "loss_fn": model_obj.loss_fn_name,
+        "regularization": model_obj.regularization,
+        "reg_weight": model_obj.reg_weight,
         "epoch": epoch,
         "step": step
-    }, os.path.join(checkpoint_dir, dataset_name, f"{model.name}{suffix}.tar"))
+        }, 
+        os.path.join(checkpoint_dir, dataset_name, f"{model.name}{suffix}.tar")
+    )
 
 
-def load_model(model, optimizer, dataset_name, epoch=None):
+def load_model(model, optimizer, dataset_name, checkpoint_dir, epoch=None):
     """
     Load the saved model
     """
     if epoch is None:
-        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}.tar")
+        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}.tar")
     else:
-        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model.name}_epoch_{epoch}.tar")
+        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}_epoch_{epoch}.tar")
 
     if not os.path.isfile(file_path):
         print(f"The model checkpoint for {model.name} at epoch {epoch} was never saved.")
@@ -47,14 +66,14 @@ def load_model(model, optimizer, dataset_name, epoch=None):
     return model, optimizer
 
 
-def checkpoint_exists(model_name, dataset_name, epoch=None):
+def checkpoint_exists(model_name, dataset_name, checkpoint_dir, epoch=None):
     """
     Check if a given checkpoint was ever saved
     """
     if epoch is None:
-        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model_name}.tar")
+        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model_name}.tar")
     else:
-        file_path = os.path.join(CHECKPOINT_DIR, dataset_name, f"{model_name}_epoch_{epoch}.tar")
+        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model_name}_epoch_{epoch}.tar")
 
     return os.path.isfile(file_path)
 
