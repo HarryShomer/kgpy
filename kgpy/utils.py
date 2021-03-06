@@ -59,11 +59,18 @@ def load_model(model, optimizer, dataset_name, checkpoint_dir, epoch=None):
         print(f"The model checkpoint for {model.name} at epoch {epoch} was never saved.")
         return None, None
 
-    checkpoint = torch.load(file_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    return model, optimizer
+    # If wrapped in DataParallel object this is how we access the underlying model
+    if isinstance(model, DataParallel):
+        model_obj = model.module
+    else:
+        model_obj = model
+
+    checkpoint = torch.load(file_path)
+    model_obj.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizersstate_dict'])
+
+    return model_obj, optimizer
 
 
 def checkpoint_exists(model_name, dataset_name, checkpoint_dir, epoch=None):

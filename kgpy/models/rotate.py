@@ -1,7 +1,7 @@
 """
-Implementation of Complex. 
+Implementation of RotatE. 
 
-See paper for more details - http://proceedings.mlr.press/v48/trouillon16.pdf.
+See paper for more details - https://arxiv.org/abs/1902.10197.
 """
 import torch
 import numpy as np
@@ -9,8 +9,11 @@ import numpy as np
 from .base_model import ComplexEmbeddingModel
 
 
-class ComplEx(ComplexEmbeddingModel):
+class RotatE(ComplexEmbeddingModel):
     """
+    Implementation of RotatE
+
+    Ensure Modulus of relation embeddings = 1
     """
 
     def __init__(
@@ -19,10 +22,10 @@ class ComplEx(ComplexEmbeddingModel):
         relations, 
         latent_dim=100, 
         margin=1, 
-        regularization = 'l2',
-        reg_weight = 1e-6,
+        regularization = None,
+        reg_weight = 0,
         weight_init="normal",
-        loss_fn= "ranking"  #"softplus"
+        loss_fn= "ranking"
     ):
         super().__init__(
             type(self).__name__, 
@@ -40,10 +43,9 @@ class ComplEx(ComplexEmbeddingModel):
 
     def score_function(self, triplets):
         """        
-        Score =  <Re(h), Re(r), Re(t)>
-               + <Im(h), Re(r), Im(t)>
-               + <Re(h), Im(r), Im(t)>
-               - <Im(h), Im(r), Re(t)>
+        Score = || h * r - t || in complex space
+
+        They use L1 norm.
 
         Parameters:
         -----------
@@ -62,11 +64,11 @@ class ComplEx(ComplexEmbeddingModel):
         r_re = self.relation_emb_re(triplets[:, 1])
         r_im = self.relation_emb_im(triplets[:, 1])
 
-        return torch.sum(
-                  (h_re * r_re * t_re) 
-                + (h_im * r_re * t_im)
-                + (h_re * r_im * t_im)
-                - (h_im * r_im * t_re)
-                , dim=-1
-            ) 
+        # Vector product - complex space
+        real_score = (h_re * r_re - h_im * r_im) - t_re
+        im_score = (h_re * r_im + h_im * r_re) - t_im
 
+        # TODO: Check
+        score = torch.stack([real_score, im_score], dim = 0)
+        score = score.norm(p=1, dim = 0)
+        

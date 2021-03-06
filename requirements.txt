@@ -1,3 +1,4 @@
+tqdm
 torch
 numpy
 tensorboard

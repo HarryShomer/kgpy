@@ -57,16 +57,17 @@ optional arguments:
   --test-model          Evaluate all saved versions of a given model and dataset on the test set
 ```
 
-
+In order to work you must run it as a module. This is done like so
+```
+python -m kgpy.main [Insert CLI args]
+```
 
 ### TODO:
 
-1. CLI Interface --Done
-2. Negative Sampling // Implemented - need to look into more
-3. Create custom classes for loss functions // loss.py
-4. Improved testing workflow (check dev branch)
-5. Implement other baseline methods (e.g. ConvE)
-6. Better documentation
+1. Negative Sampling // Refactor?
+2. Create custom classes for loss functions // loss.py
+3. Implement other baseline methods (e.g. ConvE)
+4. Better documentation
 
 ### Data
 

@@ -21,7 +21,7 @@ class DistMult(SingleEmbeddingModel):
         loss_fn="ranking"
     ):
         super().__init__(
-            "DistMult", 
+            type(self).__name__,
             entities, 
             relations, 
             latent_dim, 
@@ -38,11 +38,15 @@ class DistMult(SingleEmbeddingModel):
         """
         Score function is -> h^T * diag(M) * t. We have r = diag(M).
 
-        Args:
-            triplets: List of triplets
+        Parameters:
+        -----------
+            triplets: list
+                List of triplets
 
         Returns:
-            List of scores
+        --------
+        Tensor
+            List of scores for triplets
         """
         h = self.entity_embeddings(triplets[:, 0])
         r = self.relation_embeddings(triplets[:, 1])

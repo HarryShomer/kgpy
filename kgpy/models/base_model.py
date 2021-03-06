@@ -7,8 +7,34 @@ import torch.nn as nn
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
+from kgpy import loss
+
 
 class Model(ABC, nn.Module):
+    """
+    Base Model Class
+
+    Attributes:
+    -----------
+    name: str
+        Name of model
+    entities: list
+        list of entities (`entities` attribute of `loa_data.AllDataSet` object) 
+    relations: list
+        list of relations (`relations` attribute of `loa_data.AllDataSet` object)
+    dim: int
+        hidden dimension
+    regularization: str 
+        Type of regularization. One of [None, 'l1', 'l2', 'l3']
+    reg_weight: list/float
+        Regularization weights. When list 1st entry is weight for entities and 2nd for relation embeddings.
+    weight_init: str
+        weight_init method to use
+    loss_fn: loss.Loss
+        Loss function object
+    norm_constraint: bool
+        Whether Take norm of entities after each gradient and relations at beginning   
+    """
 
     def __init__(
         self, 
@@ -17,21 +43,43 @@ class Model(ABC, nn.Module):
         relations, 
         latent_dim, 
         loss_margin, 
-        
-        # One of [None, 'l1', 'l2', 'l3']
         regularization, 
-
-        # Can both be either a constant or list
-        # When list 1st entry is weight for entities and 2nd for relation embeddings
         reg_weight,
-
         weight_init, 
         loss_fn,
-
-        # Take norm of entities after each gradient and relations at beginning
-        # TODO: Split by relation and entitiy?
-        norm_constraint
+        norm_constraint   # TODO: Split by relation and entitiy? Also allow specfication of norm?
     ):
+        """
+        Model constructor
+
+        Parameters:
+        -----------
+            model_name: str
+                Name of model
+            entities: list
+                list of entities (`entities` attribute of `loa_data.AllDataSet` object) 
+            relations: list
+                list of relations (`relations` attribute of `loa_data.AllDataSet` object)
+            latent_dim: int
+                hidden dimension
+            loss_margin: int
+                margin to use if using a margin-based loss
+            regularization: str 
+                Type of regularization. One of [None, 'l1', 'l2', 'l3']
+            reg_weight: list/float
+                Regularization weights. When list 1st entry is weight for entities and 2nd for relation embeddings.
+            weight_init: str
+                weight_init method to use
+            loss_fn: str
+                name of loss function to use
+            norm_constraint: bool
+                Whether Take norm of entities after each gradient and relations at beginning       
+
+        Returns:
+        --------
+        None
+        """
+
         super(Model, self).__init__()
         
         self.name = model_name
@@ -52,8 +100,7 @@ class Model(ABC, nn.Module):
         self.regularization = regularization
         self.reg_weight = reg_weight
 
-        self.loss_fn_name = loss_fn.lower()
-        self.loss_fn = self._determine_loss_fn(loss_margin)
+        self.loss_fn = self._determine_loss_fn(loss_fn.lower(), loss_margin)
 
 
     @abstractmethod
@@ -63,10 +110,12 @@ class Model(ABC, nn.Module):
 
         To be implemented by the specific model.
 
-        Args:
+        Parameters:
+        -----------
             triplets: List of triplets
 
         Returns:
+        --------
             List of scores
         """
         pass
@@ -80,6 +129,7 @@ class Model(ABC, nn.Module):
         To be implemented by the specific type of model.
 
         Returns:
+        --------
             Embeddings
         """
         pass
@@ -112,6 +162,7 @@ class Model(ABC, nn.Module):
         To be implemented by the specific type of model.
 
         Returns:
+        --------
             Regularization term for loss
         """
         pass
@@ -122,7 +173,11 @@ class Model(ABC, nn.Module):
         """
         Get the current device being used
 
-        Returns: str
+        To be implemented by the specific type of model.
+        
+        Returns:
+        --------
+        str
             device name
         """
         pass
@@ -135,13 +190,15 @@ class Model(ABC, nn.Module):
         2. Computes score for both types of triplets
         3. Computes loss
 
-        Args:
+        Parameters:
+        -----------
             triplets: list
                 List of triplets to train on
             corrupted_triplets: list
                 Corresponding tripets with head/tail replaced
 
         Returns:
+        --------
             Mean loss
         """
         cur_device = self._get_cur_device()
@@ -149,72 +206,53 @@ class Model(ABC, nn.Module):
         if self.norm_constraint:
             self._normalize_entities(2)
 
-        positive_scores = self.score_function(triplets)
-        negative_scores = self.score_function(corrupted_triplets)
+        pos_scores = self.score_function(triplets)
+        neg_scores = self.score_function(corrupted_triplets)
 
-        return self.loss(positive_scores, negative_scores, cur_device)
-
-
-    def loss(self, positive_scores, negative_scores, device):
-        """
-        Compute loss
-
-        Args:
-            positive_scores: Scores for real tiples
-            negative_scores: Scores for corrupted triplets
-            device: optional device
-
-        Returns:
-            Loss
-        """
-        reg = self._regularization()
-
-        if self.loss_fn_name == "ranking":
-            base_loss = self._ranking_loss(positive_scores, negative_scores, device)
-
-        if self.loss_fn_name == "softplus":
-            base_loss = self._softplus_loss(positive_scores, negative_scores, device)
-
-        # if self.loss_fn_name == "cross-entropy":
-        #     base_loss = self._cross_entropy_loss(positive_scores, negative_scores)
-
-        return base_loss + reg
+        return self.loss_fn(pos_scores, neg_scores, cur_device) + self._regularization()
 
 
-    def _determine_loss_fn(self, loss_margin):
+
+    # TODO: Move outside of class?
+    def _determine_loss_fn(self, loss_fn_name, loss_margin):
         """
         Determine loss function based on user input (self.loss_fn_name). 
 
         Throw exception when invalid.
 
-        Args:
-            loss_margin: str
+        Parameters:
+        -----------
+            loss_fn_name: str
+                Name of loss function fed to constructor
+            loss_margin: int
                 Optional margin or hinge style losses
 
         Returns:
-            loss function methd
+        --------
+        loss.Loss
+            Specific loss function
         """
-        if self.loss_fn_name == "ranking":
-            return nn.MarginRankingLoss(margin=loss_margin, reduction='mean')
-        elif self.loss_fn_name == "bce":
-            return nn.BCEWithLogitsLoss(reduction='mean')
-        
-        # TODO
-        elif self.loss_fn_name == "softplus":
-            return
+        if loss_fn_name == "ranking":
+            return loss.MarginRankingLoss(margin=loss_margin)
+        elif loss_fn_name == "bce":
+            return loss.BCELoss()
+        elif loss_fn_name == "softplus":
+            return loss.SoftPlusLoss()
       
-        raise ValueError(f"Invalid loss function type - {loss_fn}. Must be either 'ranking' or 'cross-entropy'")
+        raise ValueError(f"Invalid loss function type - {loss_fn_name}")
         
 
     def _get_weight_init_method(self):
         """
         Determine the correct weight initializer method and init weights
 
-        Args:
+        Parameters:
+        -----------
             weight_init_method: str
                 Type of weight init method. Currently only works with "uniform" and "normal"
 
         Returns:
+        --------
             Correct nn.init function
         """
         if self.weight_init == "normal":
@@ -225,99 +263,17 @@ class Model(ABC, nn.Module):
             raise ValueError(f"Invalid weight initializer passed {self.weight_init}. Must be either 'uniform' or 'normal'.")
 
 
-    def _ranking_loss(self, positive_scores, negative_scores, device):
-        """
-        Compute margin ranking loss
-
-        Args:
-            positive_scores: Scores for real tiples
-            negative_scores: Scores for corrupted triplets
-            device: optional device
-            
-        Returns:
-            Loss
-        """
-        target = torch.ones_like(positive_scores, device=device)
-        return self.loss_fn(positive_scores, negative_scores, target)
-
-
-    def _softplus_loss(self, positive_scores, negative_scores, device):
-        """
-        Minimize the softplus loss.
-
-        L(score_i, label_i) = log(1 + exp(-label_i * score_i))
-
-        Example: Used in Complex
-
-        Args:
-            positive_scores: Scores for real tiples
-            negative_scores: Scores for corrupted triplets
-            
-        Returns:
-            Loss
-        """
-        softplus = nn.Softplus(beta=1)
-
-        positive_scores *= -1
-        all_scores = torch.cat((positive_scores, negative_scores))
-
-        return softplus(all_scores).mean()
-
-
-
-    def _bce_loss(self, positive_scores, negative_scores, device):
-        """
-        Compute Binary coss entropy loss
-
-        Args:
-            positive_scores: Scores for real tiples
-            negative_scores: Scores for corrupted triplets
-            device: optional device
-        
-        Returns:
-            Loss
-        """
-        all_scores = torch.cat((positive_scores, negative_scores))
-
-        target_positives = torch.ones_like(positive_scores, device=device)
-        target_negatives = torch.zeros_like(negative_scores, device=device)
-        all_targets = torch.cat((target_positives, target_negatives))
-
-        return self.loss_fn(all_scores, all_targets)
-
-
-
-    # TODO - Worth doing?
-    def _cross_entropy_loss(self, positive_scores, negative_scores, device):
-        """
-        Compute cross-entropy loss
-        
-        Args:
-            positive_scores: Scores for real tiples
-            negative_scores: Scores for corrupted triplets
-            
-        Returns:
-            Loss
-        """
-        all_scores = torch.cat((positive_scores, negative_scores))
-
-        target_positives = torch.ones_like(positive_scores, device=device)
-        target_negatives = torch.zeros_like(negative_scores, device=device)
-        all_targets = torch.cat((target_positives, target_negatives))
-
-        return self.loss_fn(all_scores, all_targets)
-
-
-
     def _normalize(self, emb, p):
         """
         Normalize an embedding by some p-norm.
 
-        Args:
+        Parameters:
+        -----------
             emb: nn.Embedding
             p: p-norm value
 
         Returns:
+        --------
             Embedding
         """
         emb.weight.data = emb.weight.data / self._norm(emb, p, dim=1, keepdim=True)
@@ -328,11 +284,13 @@ class Model(ABC, nn.Module):
         """
         Return norm of the embeddings
 
-        Args:
+        Parameters:
+        -----------
             emb: nn.Embedding
             p: p-norm value
 
         Returns:
+        --------
             Norm value
         """
         return emb.weight.data.norm(p=p, **kwargs)
@@ -374,26 +332,28 @@ class SingleEmbeddingModel(Model):
         )
         self.entity_embeddings, self.relation_embeddings = self._create_embeddings()
 
-        # TODO: L1 or L2??
         if self.norm_constraint:
-           self._normalize_relations(1)
+           self._normalize_relations(2)
 
 
     def _create_embeddings(self):
         """
         Create the embeddings. Control for if regular embedding or complex
 
-        Args:
+        Parameters:
+        -----------
             complex_emb: bool
                 True if complex
 
-        Returns: tuple
+        Returns:
+        --------
+        tuple
             entity_embs, relation_embs
         """
         weight_init_method = self._get_weight_init_method()
 
         entity_emb = nn.Embedding(len(self.entities), self.dim)
-        relation_emb = nn.Embedding(len(self.entities), self.dim)
+        relation_emb = nn.Embedding(len(self.relations), self.dim)
 
         weight_init_method(entity_emb.weight)
         weight_init_method(relation_emb.weight)
@@ -405,23 +365,30 @@ class SingleEmbeddingModel(Model):
         """
         Normalize entity embeddings by some p-norm. Does so in-place
 
-        Args:
-            p: p-norm value
+        Parameters:
+        -----------
+            p: int
+                p-norm value
 
         Returns:
+        --------
             None
         """
         self.entity_embeddings = self._normalize(self.entity_embeddings, p)
+
 
     
     def _normalize_relations(self, p):
         """
         Normalize relations embeddings by some p-norm.  Does so in-place
 
-        Args:
-            p: p-norm value
+        Parameters:
+        -----------
+            p: int
+                p-norm value
 
         Returns:
+        --------
             Norne
         """
         self.relation_embeddings = self._normalize(self.relation_embeddings, p)
@@ -430,7 +397,10 @@ class SingleEmbeddingModel(Model):
     def _regularization(self):
         """
         Apply regularization if specified.
+
         Returns:
+        --------
+        float
             Regularization term for loss
         """
         if self.regularization is None:
@@ -450,7 +420,9 @@ class SingleEmbeddingModel(Model):
         """
         Get the current device being used
 
-        Returns: str
+        Returns:
+        --------
+        str
             device name
         """
         return self.entity_embeddings.weight.device
@@ -492,29 +464,30 @@ class ComplexEmbeddingModel(Model):
         
         self.entity_emb_re, self.entity_emb_im, self.relation_emb_re, self.relation_emb_im = self._create_embeddings()
         
-        # TODO: L1 or L2??
         if self.norm_constraint:
-           self._normalize_relations(1)
+           self._normalize_relations(2)
 
 
     def _create_embeddings(self):
         """
         Create the complex embeddings.
 
-        Args:
+        Parameters:
+        -----------
             complex_emb: bool
                 True if complex
 
-        Returns: tuple
-            entity_embs, relation_embs
+        Returns:
+        --------
+        tuple
+            entity_emb_re, entity_emb_im, relation_emb_re, relation_emb_im
         """
-        entity_embs, relation_embs = [], []
         weight_init_method = self._get_weight_init_method()
 
         entity_emb_re = nn.Embedding(len(self.entities), self.dim)
-        relation_emb_re = nn.Embedding(len(self.entities), self.dim)
+        relation_emb_re = nn.Embedding(len(self.relations), self.dim)
         entity_emb_im = nn.Embedding(len(self.entities), self.dim)
-        relation_emb_im = nn.Embedding(len(self.entities), self.dim)
+        relation_emb_im = nn.Embedding(len(self.relations), self.dim)
 
         weight_init_method(entity_emb_re.weight)
         weight_init_method(relation_emb_re.weight)
@@ -526,30 +499,47 @@ class ComplexEmbeddingModel(Model):
 
     def _normalize_entities(self, p):
         """
-        Normalize entity embeddings by some p-norm. Does so in-place
+        Normalize entity embeddings by some p-norm. Does so in-place.
 
-        Args:
-            p: p-norm value
+        Parameters:
+        -----------
+            p: int
+                p-norm value
 
         Returns:
+        --------
             None
         """
-        self.entity_emb_re = self._normalize(self.entity_emb_re, p)
-        self.entity_emb_im = self._normalize(self.entity_emb_im, p)
+        e_re_sum = self.entity_emb_re.weight.pow(p).sum(dim=-1)
+        e_im_sum = self.entity_emb_im.weight.pow(p).sum(dim=-1)
+        
+        e_norm = torch.sqrt(e_re_sum + e_im_sum)
+
+        self.entity_emb_re.weight.data = self.entity_emb_re.weight.data / e_norm.reshape(-1, 1)
+        self.entity_emb_im.weight.data = self.entity_emb_im.weight.data / e_norm.reshape(-1, 1)
 
 
     def _normalize_relations(self, p):
         """
         Normalize relations embeddings by some p-norm.  Does so in-place
 
-        Args:
-            p: p-norm value
+        Parameters:
+        -----------
+            p: int
+                p-norm value
 
         Returns:
+        --------
             None
         """
-        self.relation_emb_re = self._normalize(self.relation_emb_re, p)
-        self.relation_emb_im = self._normalize(self.relation_emb_im, p)
+        r_re_sum = self.relation_emb_re.weight.pow(p).sum(dim=-1)
+        r_im_sum = self.relation_emb_im.weight.pow(p).sum(dim=-1)
+        
+        r_norm = torch.sqrt(r_re_sum + r_im_sum)
+
+        self.relation_emb_re.weight.data = self.relation_emb_re.weight.data / r_norm.reshape(-1, 1)
+        self.relation_emb_im.weight.data = self.relation_emb_im.weight.data / r_norm.reshape(-1, 1)
+
 
 
     def _regularization(self):
@@ -557,6 +547,8 @@ class ComplexEmbeddingModel(Model):
         Apply regularization if specified.
 
         Returns:
+        --------
+        float
             Regularization term for loss
         """
         if self.regularization is None:
@@ -569,7 +561,6 @@ class ComplexEmbeddingModel(Model):
         relation_re = self._norm(self.relation_emb_re, lp)
         relation_im = self._norm(self.relation_emb_im, lp)
 
-
         if isinstance(self.reg_weight, Iterable):
             return self.reg_weight[0] * (entity_re**lp + entity_im**lp) + self.reg_weight[1] * (relation_re**lp + relation_im**lp)
         
@@ -580,7 +571,9 @@ class ComplexEmbeddingModel(Model):
         """
         Get the current device being used
 
-        Returns: str
+        Returns:
+        --------
+        str
             device name
         """
         return self.entity_emb_re.weight.device

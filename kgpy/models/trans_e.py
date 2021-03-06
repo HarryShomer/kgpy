@@ -24,7 +24,7 @@ class TransE(SingleEmbeddingModel):
         loss_fn="ranking"
     ):
         super().__init__(
-            "TransE", 
+            type(self).__name__,
             entities, 
             relations, 
             latent_dim, 
@@ -43,11 +43,15 @@ class TransE(SingleEmbeddingModel):
         Get the score for a given set of triplets.
         Negate score so that lower distances which indicates a better fit score higher than higher distances
 
-        Args:
-            triplets: List of triplets
-        
+        Parameters:
+        -----------
+            triplets: list
+                List of triplets
+
         Returns:
-            List of scores
+        --------
+        Tensor
+            List of scores for triplets
         """
         h = self.entity_embeddings(triplets[:, 0])
         r = self.relation_embeddings(triplets[:, 1])
