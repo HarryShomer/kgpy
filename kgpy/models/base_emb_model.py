@@ -10,18 +10,18 @@ from collections.abc import Iterable
 from kgpy import loss
 
 
-class Model(ABC, nn.Module):
+class EmbeddingModel(ABC, nn.Module):
     """
-    Base Model Class
+    Base Embedding Model Class
 
     Attributes:
     -----------
     name: str
         Name of model
     entities: list
-        list of entities (`entities` attribute of `loa_data.AllDataSet` object) 
+        list of entities (`entities` attribute of `load_data.AllDataSet` object) 
     relations: list
-        list of relations (`relations` attribute of `loa_data.AllDataSet` object)
+        list of relations (`relations` attribute of `load_data.AllDataSet` object)
     dim: int
         hidden dimension
     regularization: str 
@@ -79,8 +79,7 @@ class Model(ABC, nn.Module):
         --------
         None
         """
-
-        super(Model, self).__init__()
+        super(EmbeddingModel, self).__init__()
         
         self.name = model_name
         self.dim = latent_dim
@@ -100,7 +99,7 @@ class Model(ABC, nn.Module):
         self.regularization = regularization
         self.reg_weight = reg_weight
 
-        self.loss_fn = self._determine_loss_fn(loss_fn.lower(), loss_margin)
+        self.loss_fn = loss.get_loss_fn(loss_fn.lower(), loss_margin)
 
 
     @abstractmethod
@@ -144,6 +143,7 @@ class Model(ABC, nn.Module):
         """
         pass
 
+
     @abstractmethod
     def _normalize_relations(self):
         """
@@ -155,7 +155,7 @@ class Model(ABC, nn.Module):
 
 
     @abstractmethod
-    def _regularization(self):
+    def regularize(self):
         """
         Apply specific type of regularization if specified.
 
@@ -169,7 +169,7 @@ class Model(ABC, nn.Module):
 
 
     @abstractmethod
-    def _get_cur_device(self):
+    def _cur_device(self):
         """
         Get the current device being used
 
@@ -183,64 +183,57 @@ class Model(ABC, nn.Module):
         pass
 
 
-    def forward(self, triplets, corrupted_triplets):
+    def forward(self, triplets, mode=None):
         """
         Forward pass for our model.
         1. Normalizes entity embeddings to unit length if specified
-        2. Computes score for both types of triplets
-        3. Computes loss
+        2. Computes score for tpe of triplets
+        3. Return scores for each triplet
 
         Parameters:
         -----------
             triplets: list
                 List of triplets to train on
-            corrupted_triplets: list
-                Corresponding tripets with head/tail replaced
+            mode: str
+                None, head, tail
 
         Returns:
         --------
-            Mean loss
+        list
+            score for each triplet in batch
         """
-        cur_device = self._get_cur_device()
-
         if self.norm_constraint:
             self._normalize_entities(2)
 
-        pos_scores = self.score_function(triplets)
-        neg_scores = self.score_function(corrupted_triplets)
+        if mode is None:
+            scores = self.score_function(triplets)
+        elif mode == "head":
+            scores = self.score_head(triplets)
+        elif mode == "tail":
+            scores = self.score_tail(triplets)
+        else:
+            raise ValueError("Invalid value for `mode` passed to Model.forward(). Must be one of [None, 'head', 'tail']")
 
-        return self.loss_fn(pos_scores, neg_scores, cur_device) + self._regularization()
+        return scores
 
-
-
-    # TODO: Move outside of class?
-    def _determine_loss_fn(self, loss_fn_name, loss_margin):
+    
+    def loss(self, **kwargs):
         """
-        Determine loss function based on user input (self.loss_fn_name). 
-
-        Throw exception when invalid.
+        Get Loss for given scores
 
         Parameters:
         -----------
-            loss_fn_name: str
-                Name of loss function fed to constructor
-            loss_margin: int
-                Optional margin or hinge style losses
+            kwargs: dict
+                Contents depend on training method and type of loss.
 
         Returns:
         --------
-        loss.Loss
-            Specific loss function
+        float
+            loss for samples
         """
-        if loss_fn_name == "ranking":
-            return loss.MarginRankingLoss(margin=loss_margin)
-        elif loss_fn_name == "bce":
-            return loss.BCELoss()
-        elif loss_fn_name == "softplus":
-            return loss.SoftPlusLoss()
-      
-        raise ValueError(f"Invalid loss function type - {loss_fn_name}")
-        
+
+        return self.loss_fn(device=self._cur_device(), **kwargs) + self.regularize()
+
 
     def _get_weight_init_method(self):
         """
@@ -296,12 +289,12 @@ class Model(ABC, nn.Module):
         return emb.weight.data.norm(p=p, **kwargs)
 
 
-#####################################################
-#####################################################
-#####################################################
+#######################################################################################################
+#######################################################################################################
+#######################################################################################################
 
 
-class SingleEmbeddingModel(Model):
+class SingleEmbeddingModel(EmbeddingModel):
     """
     Each entity / relation gets one embedding
     """
@@ -338,7 +331,7 @@ class SingleEmbeddingModel(Model):
 
     def _create_embeddings(self):
         """
-        Create the embeddings. Control for if regular embedding or complex
+        Create the embeddings.
 
         Parameters:
         -----------
@@ -394,7 +387,7 @@ class SingleEmbeddingModel(Model):
         self.relation_embeddings = self._normalize(self.relation_embeddings, p)
 
 
-    def _regularization(self):
+    def regularize(self):
         """
         Apply regularization if specified.
 
@@ -416,7 +409,7 @@ class SingleEmbeddingModel(Model):
         return self.reg_weight * (entity_norm**lp + relation_norm**lp) 
 
 
-    def _get_cur_device(self):
+    def _cur_device(self):
         """
         Get the current device being used
 
@@ -428,13 +421,14 @@ class SingleEmbeddingModel(Model):
         return self.entity_embeddings.weight.device
 
 
-#####################################################
-#####################################################
-#####################################################
+#######################################################################################################
+#######################################################################################################
+#######################################################################################################
 
 
-class ComplexEmbeddingModel(Model):
+class ComplexEmbeddingModel(EmbeddingModel):
     """
+    Embeddings are in complex space
     """
     def __init__(
         self, 
@@ -542,7 +536,7 @@ class ComplexEmbeddingModel(Model):
 
 
 
-    def _regularization(self):
+    def regularize(self):
         """
         Apply regularization if specified.
 
@@ -567,7 +561,7 @@ class ComplexEmbeddingModel(Model):
         return self.reg_weight * (entity_re**lp + entity_im**lp + relation_re**lp + relation_im**lp) 
 
 
-    def _get_cur_device(self):
+    def _cur_device(self):
         """
         Get the current device being used
 
@@ -577,3 +571,5 @@ class ComplexEmbeddingModel(Model):
             device name
         """
         return self.entity_emb_re.weight.device
+
+

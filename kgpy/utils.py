@@ -36,7 +36,7 @@ def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suff
         "model_state_dict": model_obj.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "latent_dim": model_obj.dim,
-        "loss_fn": model_obj.loss_fn_name,
+        "loss_fn": model_obj.loss_fn.__class__.__name__,
         "regularization": model_obj.regularization,
         "reg_weight": model_obj.reg_weight,
         "epoch": epoch,

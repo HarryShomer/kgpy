@@ -6,7 +6,7 @@ See paper for more details - https://arxiv.org/pdf/1412.6575.pdf.
 import torch
 import numpy as np
 
-from .base_model import SingleEmbeddingModel
+from .base_emb_model import SingleEmbeddingModel
 
 
 class DistMult(SingleEmbeddingModel):

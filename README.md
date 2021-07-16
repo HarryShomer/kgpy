@@ -1,5 +1,7 @@
 ## kgpy
 
+Implementations of various knowledge graph embedding techniques.
+
 Models implemented so far:
 
 1. TransE
@@ -64,10 +66,11 @@ python -m kgpy.main [Insert CLI args]
 
 ### TODO:
 
-1. Negative Sampling // Refactor?
-2. Create custom classes for loss functions // loss.py
-3. Implement other baseline methods (e.g. ConvE)
+1. Negative Sampling loss (for RotatE)
+2. 1-N scoring (see ConvE)
+3. Implement other KGEs
 4. Better documentation
+5. Convert evaluation to class and feed device
 
 ### Data
 

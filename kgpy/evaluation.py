@@ -11,6 +11,8 @@ else:
   device = "cpu"
 
 
+
+
 def mean_rank(batch_head_scores, batch_tail_scores):
     """
     The mean rank of the true link among the scores.

@@ -2,19 +2,16 @@ import os
 import json
 import torch
 import numpy as np 
+from collections import defaultdict
+
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "kg_datasets")
-
-if torch.cuda.is_available():  
-  device = "cuda" 
-else:  
-  device = "cpu"
-
 
 
 class TrainDataset(torch.utils.data.Dataset):
     """
     Extend torch.utils.data.Dataset.
+
     Loads a given split for a data set (e.g. training data)
     """
 
@@ -25,14 +22,14 @@ class TrainDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         """
-        Length of dataset
+        Number of triplets in training dataset
         """
         return len(self.triplets)
 
 
     def __getitem__(self, index):
         """
-        Get indicies for the ith triplet
+        Get indicies for the ith triplet -> head, relation, tail
         """
         return self.triplets[index][0], self.triplets[index][1], self.triplets[index][2]
 
@@ -40,6 +37,7 @@ class TrainDataset(torch.utils.data.Dataset):
 
 class TestDataset(torch.utils.data.Dataset):
     """
+    Dataset object for test data
     """
 
     def __init__(self, dataset_name, triplets, all_triplets, num_entities, evaluation_method):
@@ -117,22 +115,29 @@ class AllDataSet():
     @property
     def all_triplets(self):
         return list(set(self.train_triplets + self.valid_triplets + self.test_triplets))
-    
 
+        
     def __getitem__(self, key):
         """
         Get specific dataset
         """
         if key == 'train':
-            return self.train
+            return self.train_triplets
         if key == 'validation':
-            return self.validation
+            return self.valid_triplets
         if key == "test":
-            return self.test
+            return self.test_triplets
 
         print("No key with name", key)
 
         return None
+
+
+    def all_triplets_map(self):
+        """
+        Not a property for efficiency
+        """
+        return {t: True for t in self.all_triplets}
 
 
     def _load_mapping(self):

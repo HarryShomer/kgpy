@@ -6,7 +6,7 @@ See paper for more details - https://arxiv.org/abs/1902.10197.
 import torch
 import numpy as np
 
-from .base_model import ComplexEmbeddingModel
+from .base_emb_model import ComplexEmbeddingModel
 
 
 class RotatE(ComplexEmbeddingModel):

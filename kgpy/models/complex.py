@@ -6,7 +6,7 @@ See paper for more details - http://proceedings.mlr.press/v48/trouillon16.pdf.
 import torch
 import numpy as np
 
-from .base_model import ComplexEmbeddingModel
+from .base_emb_model import ComplexEmbeddingModel
 
 
 class ComplEx(ComplexEmbeddingModel):
