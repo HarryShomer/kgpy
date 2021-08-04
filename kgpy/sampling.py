@@ -12,11 +12,15 @@ class Sampler(ABC):
     """
     Abstract base class for implementing samplers
     """
-    def __init__(self, triplets, batch_size, num_ents, device):
+    def __init__(self, triplets, batch_size, num_ents, device, inverse):
         self.bs = batch_size
         self.triplets = triplets
         self.num_ents = num_ents
+        self.inverse = inverse
         self.device = device
+
+        self._build_index()
+        self.keys = list(self.index.keys())
 
 
     def __iter__(self):
@@ -45,6 +49,79 @@ class Sampler(ABC):
         pass
 
 
+    @abstractmethod
+    def _increment_iter(self):
+        """
+        Increment the iterator by batch size. Constrain to be len(_) at max
+        """
+        pass
+
+    
+    def _build_index(self):
+        """
+        Create self.index mapping.
+
+        self.index contains 2 types of mappings:
+            - All possible head entities for statement (_, relation, tail)
+            - All possible tail entities for statement (head, relation, _)
+        
+        These are stored in self.index in form of:
+            - For head mapping -> ("head", relation, tail)
+            - For tail mapping -> ("tail", relation, head)
+        
+        The value for each key is a list of possible entities (e.g. [1, 67, 32]) 
+        
+        Returns:
+        --------
+        None
+        """
+        self.index = defaultdict(list)
+
+        for t in self.triplets:
+            if self.inverse:
+                self.index[(t[1], t[0])].append(t[2])
+            else:
+                self.index[("head", t[1], t[2])].append(t[0])
+                self.index[("tail", t[1], t[0])].append(t[2])
+
+
+        # Remove duplicates
+        for k, v in self.index.items():
+            self.index[k] = list(set(v))
+
+
+    def _get_labels(self, samples):
+        """
+        Get the label arrays for the corresponding batch of samples
+
+        Parameters:
+        -----------
+            samples: Tensor
+                2D Tensor of batches
+
+        Returns:
+        --------
+        Tensor
+            Size of (samples, num_ents). 
+            Entry = 1 when possible head/tail else 0
+        """
+        y = torch.zeros(samples.shape[0], self.num_ents, dtype=torch.float16, device=self.device)  #.long()
+
+        for i, x in enumerate(samples):
+            lbls = self.index[tuple(x)]
+            y[i, lbls] = 1
+
+        return y
+
+
+
+#################################################################################
+#
+# Different Sampler
+#
+#################################################################################
+
+
 class One_to_K(Sampler):
     """
     Standard sampler that produces k corrupted samples for each training sample.
@@ -62,12 +139,14 @@ class One_to_K(Sampler):
         num_negative: int
             Number of corrupted samples to produce per training procedure
     """
-    def __init__(self, triplets, batch_size, num_ents, device, num_negative=1):
-        super(One_to_K, self).__init__(triplets, batch_size, num_ents, device)
+    def __init__(self, triplets, batch_size, num_ents, device, num_negative=1, inverse=False):
+        super(One_to_K, self).__init__(triplets, batch_size, num_ents, device, inverse)
 
         self.num_negative = num_negative
         if self.num_negative > 1:
             raise NotImplemented("`num_negative` can only be 1. Need to implement > 1")
+        
+        self._shuffle()
 
 
     def __len__(self):
@@ -163,12 +242,8 @@ class One_to_N(Sampler):
             Total number of entities in dataset
     """
     
-    def __init__(self, triplets, batch_size, num_ents, device):
-        super(One_to_N, self).__init__(triplets, batch_size, num_ents, device)
-
-        self._build_index()
-
-        self.keys = list(self.index.keys())
+    def __init__(self, triplets, batch_size, num_ents, device, inverse=False):
+        super(One_to_N, self).__init__(triplets, batch_size, num_ents, device, inverse)
         self._shuffle()
 
 
@@ -188,59 +263,6 @@ class One_to_N(Sampler):
         Shuffle keys for both indices
         """
         np.random.shuffle(self.keys)
-    
-
-    def _build_index(self):
-        """
-        Create self.index mapping.
-
-        self.index contains 2 types of mappings:
-            - All possible head entities for statement (_, relation, tail)
-            - All possible tail entities for statement (head, relation, _)
-        
-        These are stored in self.index in form of:
-            - For head mapping -> ("head", relation, tail)
-            - For tail mapping -> ("tail", relation, head)
-        
-        The value for each key is a list of possible entities (e.g. [1, 67, 32]) 
-        
-        Returns:
-        --------
-        None
-        """
-        self.index = defaultdict(list)
-
-        for t in self.triplets:
-            self.index[("head", t[1], t[2])].append(t[0])
-            self.index[("tail", t[1], t[0])].append(t[2])
-
-        # Remove duplicates
-        for k, v in self.index.items():
-            self.index[k] = list(set(v))
-
-
-    def _get_labels(self, samples):
-        """
-        Get the label arrays for the corresponding batch of samples
-
-        Parameters:
-        -----------
-            samples: Tensor
-                2D Tensor of batches
-
-        Returns:
-        --------
-        Tensor
-            Size of (samples, num_ents). Entry = 1 when possible head/tail else 0
-        """
-        y = torch.zeros(samples.shape[0], self.num_ents, device=self.device)  #.long()
-
-        for i, x in enumerate(samples):
-            stype, rel, ent = x[0], x[1], x[2]
-            lbls = self.index[(stype, rel, ent)]
-            y[i, lbls] = 1
-
-        return y
 
 
     def __next__(self):
@@ -249,7 +271,8 @@ class One_to_N(Sampler):
 
         Returns:
         -------
-        tuple 
+        tuple
+            indices, lbls, trip type - head/tail (optional)
         """
         if self.trip_iter >= len(self.keys)-1:
             raise StopIteration
@@ -258,12 +281,20 @@ class One_to_N(Sampler):
         batch_samples = self.keys[self.trip_iter: min(self.trip_iter + self.bs, len(self.keys))]
         batch_samples = np.array([list(x) for x in batch_samples])
 
-        # Split by type of trip and ent/rel indices
-        trip_type = batch_samples[:, 0]
-        batch_ix  = torch.Tensor(batch_samples[:, 1:].astype(np.float)).to(self.device).long()
-
-        batch_lbls = self._get_labels(batch_samples)       
-        
         self._increment_iter()
 
-        return batch_ix, batch_lbls, trip_type
+        if self.inverse:
+            batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
+            batch_lbls = self._get_labels(batch_samples)
+
+            return batch_ix, batch_lbls 
+        else:
+            # Split by type of trip and ent/rel indices
+            trip_type = batch_samples[:, 0]
+            batch_ix  = torch.Tensor(batch_samples[:, 1:].astype(np.float)).to(self.device).long()
+            batch_lbls = self._get_labels(batch_samples)       
+            
+            return batch_ix, batch_lbls, trip_type
+
+
+

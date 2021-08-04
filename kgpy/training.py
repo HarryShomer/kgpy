@@ -1,15 +1,11 @@
 import os
 import sys
-import copy
 import torch
-import random
 import numpy as np
 from tqdm import tqdm
-from torch.utils import tensorboard
 from torch.utils.tensorboard import SummaryWriter
 
-from kgpy.load_data import TrainDataset, TestDataset
-from kgpy.evaluation import evaluate_model
+from kgpy.evaluation import Evaluation
 from kgpy import utils
 from kgpy import sampling
 
@@ -28,10 +24,11 @@ class Trainer:
         optimizer, 
         data, 
         checkpoint_dir, 
-        tensorboard=True
+        tensorboard=False
     ):
         self.data = data 
         self.model = model
+        self.inverse = data.inverse
         self.optimizer = optimizer
         self.tensorboard = tensorboard
         self.device = model._cur_device()
@@ -47,12 +44,13 @@ class Trainer:
             train_batch_size, 
             train_method=None,
             validate_every=5, 
-            non_train_batch_size=16, 
+            non_train_batch_size=64, 
             early_stopping=5, 
             save_every=25,
             log_every_n_steps=25,
             negative_samples=1,
-            evaluation_method="filtered"
+            eval_method="filtered",
+            label_smooth=0
         ):
         """
         Train and validate the model
@@ -77,8 +75,10 @@ class Trainer:
                 Log training loss to tensorboard every "n" steps. Defaults to 25
             negative_samples: int
                 Number of negative samples to generate for each training sample. Defaults to 1
-            evaluation_method: str
+            eval_method: str
                 How to evaluate data. Filtered vs raw. Defaults to filtered
+            label_smooth: float
+                Label smoothing when training
 
         Returns:
         --------
@@ -87,24 +87,31 @@ class Trainer:
         step = 1
         val_mrr = []
         sampler = self._get_sampler(train_method, train_batch_size, negative_samples)
+        model_eval = Evaluation("valid", self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
 
         for epoch in range(1, epochs+1):
 
             self.model.train()   
             
+            batch_loss = []
             prog_bar = tqdm(sampler, file=sys.stdout)
             prog_bar.set_description(f"Epoch {epoch}")
 
             for batch in prog_bar:
                 step += 1
-                batch_loss = self._train_batch(batch, train_method)
+
+                batch_loss.append(self._train_batch(batch, train_method, label_smooth))
+                # batch_loss = 5
 
                 if step % log_every_n_steps == 0 and self.tensorboard:
-                    self.writer.add_scalar(f'training_loss', batch_loss, global_step=step)
+                    self.writer.add_scalar(f'training_loss', batch_loss[-1], global_step=step)
+
+
+            print("Train Loss:", np.mean(batch_loss))
 
             if epoch % validate_every == 0:
-                val_mrr.append(self._validate_model(epoch, non_train_batch_size, evaluation_method))
-    
+                val_mrr.append(self._validate_model(model_eval, epoch))
+
                 # Start checking after accumulate more than val_mrr
                 if len(val_mrr) >= early_stopping and np.argmax(val_mrr[-early_stopping:]) == 0:
                     print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!", flush=True)
@@ -120,7 +127,7 @@ class Trainer:
 
 
 
-    def _train_batch(self, batch, train_method):
+    def _train_batch(self, batch, train_method, label_smooth):
         """
         Train model on single batch
 
@@ -130,6 +137,8 @@ class Trainer:
                 Tuple of head, relations, and tails for each sample in batch
             train_method: str
                 Either 1-N or None
+            label_smooth: float
+                Label smoothing
         
         Returns:
         -------
@@ -139,9 +148,9 @@ class Trainer:
         self.optimizer.zero_grad()
 
         if train_method.upper() == "1-K":
-            batch_loss = self._train_batch_1_to_k(batch)
+            batch_loss = self._train_batch_1_to_k(batch, label_smooth)
         elif train_method.upper() == "1-N":
-            batch_loss = self._train_batch_1_to_n(batch)
+            batch_loss = self._train_batch_1_to_n(batch, label_smooth)
 
         batch_loss = batch_loss.mean()
         batch_loss.backward()
@@ -151,7 +160,7 @@ class Trainer:
         return batch_loss.item()
 
 
-    def _train_batch_1_to_k(self, batch): 
+    def _train_batch_1_to_k(self, batch, label_smooth): 
         """
         Train model on single batch using 1-K training method
 
@@ -178,7 +187,7 @@ class Trainer:
         return self.model.loss(positive_scores=pos_scores, negative_scores=neg_scores)
 
 
-    def _train_batch_1_to_n(self, batch): 
+    def _train_batch_1_to_n(self, batch, label_smooth): 
         """
         Train model on single batch
 
@@ -195,58 +204,60 @@ class Trainer:
         if 'bce' not in self.model.loss_fn.__class__.__name__.lower():
             raise ValueError("1-N training can only be used with BCE loss!")
 
-        trips, lbls, trip_type = batch[0], batch[1], batch[2]
+        if not self.inverse:
+            trips, lbls, trip_type = batch[0], batch[1], batch[2]
 
-        head_trips = trips[trip_type == "head"]
-        tail_trips = trips[trip_type == "tail"]
+            head_trips = trips[trip_type == "head"]
+            tail_trips = trips[trip_type == "tail"]
 
-        head_lbls = lbls[trip_type == "head"]
-        tail_lbls = lbls[trip_type == "tail"]
+            head_lbls = lbls[trip_type == "head"]
+            tail_lbls = lbls[trip_type == "tail"]
 
-        head_scores = self.model(head_trips, mode="head")
-        tail_scores = self.model(tail_trips, mode="tail")
+            head_scores = self.model(head_trips, mode="head")
+            tail_scores = self.model(tail_trips, mode="tail")
         
-        all_scores = torch.flatten(torch.cat((head_scores, tail_scores)))
-        all_lbls = torch.flatten(torch.cat((head_lbls, tail_lbls)))
+            all_scores = torch.flatten(torch.cat((head_scores, tail_scores)))
+            all_lbls = torch.flatten(torch.cat((head_lbls, tail_lbls)))
+        else:
+            trips, all_lbls = batch[0], batch[1]
+            all_scores = self.model(trips, mode="tail")
+
+        if label_smooth != 0.0:
+            all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)
 
         return self.model.loss(all_scores=all_scores, all_targets=all_lbls)
 
 
-       
-    def _validate_model(self, epoch, batch_size, evaluation_method):
+    def _validate_model(self, model_eval, epoch):
         """
         Evaluate model on val set
 
         Parameters:
         -----------
+            model_eval: Evaluation
+                Evaluation object
             epoch: int
                 epoch number
-            batch_size: int
-                size of batch
-            evaluation method:
-                Filtered or raw
 
         Returns:
         --------
         float
             mean reciprocal rank
         """
-        dataloader = torch.utils.data.DataLoader(
-                        TestDataset(self.data.dataset_name, self.data.valid_triplets, self.data.all_triplets, self.data.num_entities, evaluation_method), 
-                        batch_size=batch_size,
-                        num_workers=8
-                    )
-
-        mr, mrr, hits_at_1, hits_at_3, hits_at_10 = evaluate_model(self.model, dataloader)
+        results = model_eval.evaluate(self.model)
 
         if self.tensorboard:
-            self.writer.add_scalar('Hits@1%' , hits_at_1, epoch)
-            self.writer.add_scalar('Hits@3%' , hits_at_3, epoch)
-            self.writer.add_scalar('Hits@10%', hits_at_10, epoch)
-            self.writer.add_scalar('MR'      , mr, epoch)
-            self.writer.add_scalar('MRR'     , mrr, epoch)
+            self.writer.add_scalar('Hits@1%' , results['hits@1'], epoch)
+            self.writer.add_scalar('Hits@3%' , results['hits@3'], epoch)
+            self.writer.add_scalar('Hits@10%', results['hits@10'], epoch)
+            self.writer.add_scalar('MR'      , results['mr'], epoch)
+            self.writer.add_scalar('MRR'     , results['mrr'], epoch)
+        
+        print(f"Epoch {epoch} validation:")
+        for k, v in results.items():
+            print(f"  {k}: {round(v, 5)}")
 
-        return mrr
+        return results['mrr']
 
 
 
@@ -262,17 +273,19 @@ class Trainer:
                         bs, 
                         self.data.num_entities, 
                         self.device,
-                        num_negative=num_negative
+                        num_negative=num_negative,
+                        inverse=self.data.inverse
                     )
         elif train_method == "1-N":
             sampler = sampling.One_to_N(
                         self.data['train'], 
                         bs, 
                         self.data.num_entities, 
-                        self.device
+                        self.device,
+                        inverse=self.data.inverse
                     )
         else:
-            raise ValueError(f"Invalid train method `{train_method}`.")
+            raise ValueError(f"Invalid train method `{train_method}`")
         
         return sampler
 

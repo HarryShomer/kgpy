@@ -18,11 +18,11 @@ class EmbeddingModel(ABC, nn.Module):
     -----------
     name: str
         Name of model
-    entities: list
-        list of entities (`entities` attribute of `load_data.AllDataSet` object) 
-    relations: list
-        list of relations (`relations` attribute of `load_data.AllDataSet` object)
-    dim: int
+    num_entities: int
+        number of entities 
+    num_relations: int
+        number of relations
+    emb_dim: int
         hidden dimension
     regularization: str 
         Type of regularization. One of [None, 'l1', 'l2', 'l3']
@@ -39,9 +39,9 @@ class EmbeddingModel(ABC, nn.Module):
     def __init__(
         self, 
         model_name, 
-        entities, 
-        relations, 
-        latent_dim, 
+        num_entities, 
+        num_relations, 
+        emb_dim, 
         loss_margin, 
         regularization, 
         reg_weight,
@@ -56,11 +56,11 @@ class EmbeddingModel(ABC, nn.Module):
         -----------
             model_name: str
                 Name of model
-            entities: list
-                list of entities (`entities` attribute of `loa_data.AllDataSet` object) 
-            relations: list
-                list of relations (`relations` attribute of `loa_data.AllDataSet` object)
-            latent_dim: int
+            num_entities: iny
+                Number of entities 
+            num_relations: int
+                Number of relations
+            emb_dim: int
                 hidden dimension
             loss_margin: int
                 margin to use if using a margin-based loss
@@ -82,12 +82,12 @@ class EmbeddingModel(ABC, nn.Module):
         super(EmbeddingModel, self).__init__()
         
         self.name = model_name
-        self.dim = latent_dim
+        self.dim = emb_dim
         self.weight_init = "uniform" if weight_init is None else weight_init.lower()
         self.norm_constraint = norm_constraint
 
-        self.entities = entities
-        self.relations = relations
+        self.num_entities = num_entities
+        self.num_relations = num_relations
 
         # When not same reg weight for relation/entities you need to have only supplied 2
         if (isinstance(reg_weight, Iterable) and len(reg_weight) != 2):
@@ -103,15 +103,49 @@ class EmbeddingModel(ABC, nn.Module):
 
 
     @abstractmethod
-    def score_function(self, triplets):
+    def score_hrt(self, triplets):
         """
-        Get the score for a given set of triplets. Higher Score = More likely a true fact!
+        Get the score for a given set of triplets.
 
         To be implemented by the specific model.
 
         Parameters:
         -----------
             triplets: List of triplets
+
+        Returns:
+        --------
+            List of scores
+        """
+        pass
+
+    @abstractmethod
+    def score_head(self, triplets):
+        """
+        Get the score for a given set of (relation, tails) against all heads
+
+        To be implemented by the specific model.
+
+        Parameters:
+        -----------
+            triplets: List of (relation, tail) samples
+
+        Returns:
+        --------
+            List of scores
+        """
+        pass
+
+    @abstractmethod
+    def score_tail(self, triplets):
+        """
+        Get the score for a given set of (head, relation) against all tails
+
+        To be implemented by the specific model.
+
+        Parameters:
+        -----------
+            triplets: List of (head, relation) samples
 
         Returns:
         --------
@@ -206,7 +240,7 @@ class EmbeddingModel(ABC, nn.Module):
             self._normalize_entities(2)
 
         if mode is None:
-            scores = self.score_function(triplets)
+            scores = self.score_hrt(triplets)
         elif mode == "head":
             scores = self.score_head(triplets)
         elif mode == "tail":
@@ -301,9 +335,9 @@ class SingleEmbeddingModel(EmbeddingModel):
     def __init__(
         self, 
         model_name, 
-        entities, 
-        relations, 
-        latent_dim, 
+        num_entities, 
+        num_relations, 
+        emb_dim, 
         loss_margin, 
         regularization, 
         reg_weight,
@@ -313,9 +347,9 @@ class SingleEmbeddingModel(EmbeddingModel):
     ):
         super().__init__(
             model_name, 
-            entities, 
-            relations, 
-            latent_dim, 
+            num_entities, 
+            num_relations, 
+            emb_dim, 
             loss_margin, 
             regularization, 
             reg_weight,
@@ -345,8 +379,8 @@ class SingleEmbeddingModel(EmbeddingModel):
         """
         weight_init_method = self._get_weight_init_method()
 
-        entity_emb = nn.Embedding(len(self.entities), self.dim)
-        relation_emb = nn.Embedding(len(self.relations), self.dim)
+        entity_emb = nn.Embedding(self.num_entities, self.dim)
+        relation_emb = nn.Embedding(self.num_relations, self.dim)
 
         weight_init_method(entity_emb.weight)
         weight_init_method(relation_emb.weight)
@@ -433,9 +467,9 @@ class ComplexEmbeddingModel(EmbeddingModel):
     def __init__(
         self, 
         model_name, 
-        entities, 
-        relations, 
-        latent_dim, 
+        num_entities, 
+        num_relations, 
+        emb_dim, 
         loss_margin, 
         regularization, 
         reg_weight,
@@ -445,9 +479,9 @@ class ComplexEmbeddingModel(EmbeddingModel):
     ):
         super().__init__(
             model_name, 
-            entities, 
-            relations, 
-            latent_dim, 
+            num_entities, 
+            num_relations, 
+            emb_dim, 
             loss_margin, 
             regularization, 
             reg_weight,
@@ -478,10 +512,10 @@ class ComplexEmbeddingModel(EmbeddingModel):
         """
         weight_init_method = self._get_weight_init_method()
 
-        entity_emb_re = nn.Embedding(len(self.entities), self.dim)
-        relation_emb_re = nn.Embedding(len(self.relations), self.dim)
-        entity_emb_im = nn.Embedding(len(self.entities), self.dim)
-        relation_emb_im = nn.Embedding(len(self.relations), self.dim)
+        entity_emb_re = nn.Embedding(self.num_entities, self.dim)
+        relation_emb_re = nn.Embedding(self.num_relations, self.dim)
+        entity_emb_im = nn.Embedding(self.num_entities, self.dim)
+        relation_emb_im = nn.Embedding(self.num_relations, self.dim)
 
         weight_init_method(entity_emb_re.weight)
         weight_init_method(relation_emb_re.weight)

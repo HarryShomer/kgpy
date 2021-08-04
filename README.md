@@ -66,11 +66,11 @@ python -m kgpy.main [Insert CLI args]
 
 ### TODO:
 
-1. Negative Sampling loss (for RotatE)
-2. 1-N scoring (see ConvE)
-3. Implement other KGEs
-4. Better documentation
-5. Convert evaluation to class and feed device
+1. 1-N scoring
+2. Implement other KGEs
+3. Better documentation
+4. Convert evaluation to class and feed device
+5. Include inverse relations in dataset (need to be careful with 1-N training in this case)
 
 ### Data
 

@@ -18,9 +18,9 @@ class RotatE(ComplexEmbeddingModel):
 
     def __init__(
         self, 
-        entities, 
-        relations, 
-        latent_dim=100, 
+        num_entities, 
+        num_relations, 
+        emb_dim=100, 
         margin=1, 
         regularization = None,
         reg_weight = 0,
@@ -29,9 +29,9 @@ class RotatE(ComplexEmbeddingModel):
     ):
         super().__init__(
             type(self).__name__, 
-            entities, 
-            relations, 
-            latent_dim, 
+            num_entities, 
+            num_relations, 
+            emb_dim, 
             margin, 
             regularization,
             reg_weight,
@@ -41,7 +41,7 @@ class RotatE(ComplexEmbeddingModel):
         )
 
 
-    def score_function(self, triplets):
+    def score_hrt(self, triplets):
         """        
         Score = || h * r - t || in complex space
 
@@ -65,10 +65,57 @@ class RotatE(ComplexEmbeddingModel):
         r_im = self.relation_emb_im(triplets[:, 1])
 
         # Vector product - complex space
-        real_score = (h_re * r_re - h_im * r_im) - t_re
+        re_score = (h_re * r_re - h_im * r_im) - t_re
         im_score = (h_re * r_im + h_im * r_re) - t_im
 
-        # TODO: Check
-        score = torch.stack([real_score, im_score], dim = 0)
-        score = score.norm(p=1, dim = 0)
+        scores = torch.stack([re_score, im_score], dim = 0)
+        scores = scores.norm(dim = 0).sum(dim = 1)
+
+        return scores
+
         
+
+    # TODO
+    def score_head(self, triplets):
+        """
+        Get the score for a given set of triplets against *all possible* heads.
+        
+        Parameters:
+        -----------
+            triplets: list
+                List of triplets
+
+        Returns:
+        --------
+        Tensor
+            List of scores for triplets
+        """
+        h_re = self.entity_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
+        h_im = self.entity_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
+        t_re = self.entity_emb_re(triplets[:, 1])
+        t_im = self.entity_emb_im(triplets[:, 1])
+        r_re = self.relation_emb_re(triplets[:, 0])
+        r_im = self.relation_emb_im(triplets[:, 0])
+
+         
+    # TODO
+    def score_tail(self, triplets):
+        """
+        Get the score for a given set of triplets against *all possible* tails.
+
+        Parameters:
+        -----------
+            triplets: list
+                List of triplets
+
+        Returns:
+        --------
+        Tensor
+            List of scores for triplets
+        """
+        t_re = self.entity_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
+        t_im = self.entity_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
+        h_re = self.entity_emb_re(triplets[:, 1])
+        h_im = self.entity_emb_im(triplets[:, 1])
+        r_re = self.relation_emb_re(triplets[:, 0])
+        r_im = self.relation_emb_im(triplets[:, 0])

@@ -4,7 +4,6 @@ Implementation of TransE.
 See paper for more details - https://papers.nips.cc/paper/2013/file/1cecc7a77928ca8133fa24680a88d2f9-Paper.pdf.
 """
 import torch
-import numpy as np
 
 from .base_emb_model import SingleEmbeddingModel
 
@@ -13,9 +12,9 @@ class TransE(SingleEmbeddingModel):
 
     def __init__(
         self, 
-        entities, 
-        relations, 
-        latent_dim=100, 
+        num_entities, 
+        num_relations, 
+        emb_dim=100, 
         margin=1, 
         regularization = None,
         reg_weight = 0,
@@ -25,9 +24,9 @@ class TransE(SingleEmbeddingModel):
     ):
         super().__init__(
             type(self).__name__,
-            entities, 
-            relations, 
-            latent_dim, 
+            num_entities, 
+            num_relations, 
+            emb_dim, 
             margin, 
             regularization,
             reg_weight,
@@ -38,8 +37,7 @@ class TransE(SingleEmbeddingModel):
         self.norm = norm
         
 
-    # TODO: Rename to score_hrt (need to rename base that we override)
-    def score_function(self, triplets):
+    def score_hrt(self, triplets):
         """
         Get the score for a given set of triplets.
 
@@ -55,9 +53,6 @@ class TransE(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        # print(triplets)
-        # print(triplets.shape)
-
         h = self.entity_embeddings(triplets[:, 0])
         r = self.relation_embeddings(triplets[:, 1])
         t = self.entity_embeddings(triplets[:, 2])
@@ -81,7 +76,7 @@ class TransE(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h = self.entity_embeddings(torch.arange(len(self.entities), device=self._cur_device()).long())
+        h = self.entity_embeddings(torch.arange(self.num_entities, device=self._cur_device()).long())
         r = self.relation_embeddings(triplets[:, 0])
         t = self.entity_embeddings(triplets[:, 1])
 
@@ -106,11 +101,6 @@ class TransE(SingleEmbeddingModel):
         """
         h = self.entity_embeddings(triplets[:, 1])
         r = self.relation_embeddings(triplets[:, 0])
-        t = self.entity_embeddings(torch.arange(len(self.entities), device=self._cur_device()).long())
+        t = self.entity_embeddings(torch.arange(self.num_entities, device=self._cur_device()).long())
 
         return - (h[:, None, :] + r[:, None, :] - t[None, :, :]).norm(p=self.norm, dim=-1)
-
-
-
-
-
