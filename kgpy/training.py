@@ -90,24 +90,20 @@ class Trainer:
         model_eval = Evaluation("valid", self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
 
         for epoch in range(1, epochs+1):
-
-            self.model.train()   
-            
             batch_loss = []
             prog_bar = tqdm(sampler, file=sys.stdout)
             prog_bar.set_description(f"Epoch {epoch}")
+            
+            self.model.train()   
 
             for batch in prog_bar:
                 step += 1
-
                 batch_loss.append(self._train_batch(batch, train_method, label_smooth))
-                # batch_loss = 5
 
                 if step % log_every_n_steps == 0 and self.tensorboard:
                     self.writer.add_scalar(f'training_loss', batch_loss[-1], global_step=step)
 
-
-            print("Train Loss:", np.mean(batch_loss))
+            print("Epoch Loss:", np.mean(batch_loss))
 
             if epoch % validate_every == 0:
                 val_mrr.append(self._validate_model(model_eval, epoch))

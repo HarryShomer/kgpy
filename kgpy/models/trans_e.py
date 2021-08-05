@@ -32,7 +32,7 @@ class TransE(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            True
+            True  # norm_constraint
         )
         self.norm = norm
         

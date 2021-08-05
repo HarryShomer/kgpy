@@ -84,7 +84,6 @@ class Sampler(ABC):
                 self.index[("head", t[1], t[2])].append(t[0])
                 self.index[("tail", t[1], t[0])].append(t[2])
 
-
         # Remove duplicates
         for k, v in self.index.items():
             self.index[k] = list(set(v))
@@ -105,7 +104,7 @@ class Sampler(ABC):
             Size of (samples, num_ents). 
             Entry = 1 when possible head/tail else 0
         """
-        y = torch.zeros(samples.shape[0], self.num_ents, dtype=torch.float16, device=self.device)  #.long()
+        y = torch.zeros(samples.shape[0], self.num_ents, dtype=torch.float16, device=self.device)
 
         for i, x in enumerate(samples):
             lbls = self.index[tuple(x)]
@@ -117,7 +116,7 @@ class Sampler(ABC):
 
 #################################################################################
 #
-# Different Sampler
+# Different Samplers
 #
 #################################################################################
 

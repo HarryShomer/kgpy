@@ -1,5 +1,5 @@
 """
-Base model class
+Base embedding model class
 """
 import numpy as np
 import torch

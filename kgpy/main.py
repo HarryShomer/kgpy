@@ -21,8 +21,9 @@ parser.add_argument("--test-batch-size", help="Batch size to use for testing and
 parser.add_argument("--lr", help="Learning rate to use while training", default=1e-4, type=float)
 parser.add_argument("--train-type", help="Type of training method to use", type=str, default="1-N")
 parser.add_argument("--inverse", help="Include inverse edges", action='store_true', default=False)
-parser.add_argument("--label-smooth", help="label smoothing", default=0, type=float)
+# parser.add_argument("--decay", help="Decay function for LR of form C^epoch", type=float, default=None)
 
+parser.add_argument("--label-smooth", help="label smoothing", default=0, type=float)
 parser.add_argument("--lp", help="LP regularization penalty to add to loss", type=int, default=None)
 parser.add_argument("--lp-weights", help="LP regularization weights. Can give one or two.", nargs='+', default=None)
 parser.add_argument("--dim", help="Latent dimension of entities and relations", type=int, default=None)
@@ -39,7 +40,6 @@ parser.add_argument("--checkpoint-dir", help="Directory to store model checkpoin
 parser.add_argument("--tensorboard", help="Whether to log to tensorboard", action='store_true', default=False)
 parser.add_argument("--log-training-loss", help="Log training loss every n steps", default=25, type=int)
 parser.add_argument("--save-every", help="Save model every n epochs", default=25, type=int)
-parser.add_argument("--test-model", help="Evaluate all saved versions of a given model and dataset on the test set", action='store_true', default=False)
 parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metrics", type=str, default="filtered")
 
 
@@ -55,29 +55,6 @@ LAST_N_VAL = args.early_stop
 TEST_VAL_BATCH_SIZE = args.test_batch_size    # Batch size for test and validation testing
 EVERY_N_STEPS_TRAIN = args.log_training_loss  # Write training loss to tensorboard every N steps
 CHECKPOINT_DIR = args.checkpoint_dir  
-
-
-# def test_diff_models(model, optimizer, data):
-#     """
-#     Test different versions of a given model (at different epochs).
-
-#     Also test the final main version (likely differs from last epoch version)
-#     """
-#     model, optimizer = utils.load_model(model, optimizer, data.dataset_name, CHECKPOINT_DIR)
-    
-#     print(f"\nTest Results - Last Saved:")
-#     evaluation.test_model(model, data, TEST_VAL_BATCH_SIZE, args.evaluation_method)
-
-#     # Now let's see how they did by epoch
-#     for i in range(25, 1050, 25):
-#         if not utils.checkpoint_exists(model.name, data.dataset_name, CHECKPOINT_DIR, epoch=i):
-#             #print(f"The model checkpoint for {model.name} at epoch {i} was never saved.")
-#             continue
-   
-#         model, optimizer = utils.load_model(model, optimizer, data.dataset_name, CHECKPOINT_DIR, epoch=i)
-
-#         print(f"\nTest Results - Epoch {i}:")
-#         evaluation.test_model(model, data, TEST_VAL_BATCH_SIZE, args.evaluation_method)
 
 
 
@@ -107,7 +84,8 @@ def run_model(model, optimizer, data):
         "log_every_n_steps": args.log_training_loss,
         "save_every": args.save_every,
         "eval_method": args.evaluation_method,
-        "label_smooth": args.label_smooth
+        "label_smooth": args.label_smooth,
+        # "decay": args.decay
     }
 
     model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
@@ -226,13 +204,9 @@ def main():
 
     model = get_model(data)
     model = utils.DataParallel(model).to(DEVICE) if args.parallel else model.to(DEVICE)
-
     optimizer = get_optimizer(model)
 
-    if args.test_model:
-        test_diff_models(model, optimizer, data)
-    else:
-        run_model(model, optimizer, data)
+    run_model(model, optimizer, data)
 
 
 if __name__ == "__main__":
