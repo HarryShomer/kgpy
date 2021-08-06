@@ -164,6 +164,8 @@ class Trainer:
         -----------
             batch: tuple of tuples
                 First tuple is positive samples and the second negative. Each ontains head, relations, and tails.
+            label_smooth: float
+                Amount of label smoothing to use
 
         Returns:
         -------
@@ -191,6 +193,8 @@ class Trainer:
         -----------
             batch: tuple of tuples
                 First tuple is positive samples and the second negative. Each ontains head, relations, and tails.
+            label_smooth: float
+                Amount of label smoothing to use
 
         Returns:
         -------
@@ -284,7 +288,6 @@ class Trainer:
             raise ValueError(f"Invalid train method `{train_method}`")
         
         return sampler
-
 
 
 

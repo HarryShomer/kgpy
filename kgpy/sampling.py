@@ -291,9 +291,7 @@ class One_to_N(Sampler):
             # Split by type of trip and ent/rel indices
             trip_type = batch_samples[:, 0]
             batch_ix  = torch.Tensor(batch_samples[:, 1:].astype(np.float)).to(self.device).long()
-            batch_lbls = self._get_labels(batch_samples)       
-            
+            batch_lbls = self._get_labels(batch_samples)  
+
             return batch_ix, batch_lbls, trip_type
-
-
 

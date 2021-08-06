@@ -6,7 +6,7 @@ See paper for more details - https://arxiv.org/abs/1911.03082
 import torch
 import numpy as np
 import torch.nn as nn
-from torch_geometric.nn import MessagePassing
+# from torch_geometric.nn import MessagePassing
 
 from .base_gnn_model import BaseGNNModel
 

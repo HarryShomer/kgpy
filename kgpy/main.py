@@ -6,7 +6,6 @@ import numpy as np
 from kgpy import utils
 from kgpy import models
 from kgpy import load_data
-from kgpy import evaluation
 from kgpy.training import Trainer
 from kgpy.evaluation import Evaluation
 
@@ -91,9 +90,11 @@ def run_model(model, optimizer, data):
     model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
     model_trainer.fit(EPOCHS, TRAIN_BATCH_SIZE, **train_keywords)
 
-    print("\nTest Results:", flush=True)
+    # TODO: Move to Trainer?
     model_eval = Evaluation("test", data, data.inverse, eval_method=args.evaluation_method, bs=TEST_VAL_BATCH_SIZE, device=DEVICE)
     test_results = model_eval.evaluate(model)
+    
+    print("\nTest Results:", flush=True)
     print(test_results)
 
 

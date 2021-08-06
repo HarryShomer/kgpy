@@ -20,11 +20,6 @@ class TestDataset(torch.utils.data.Dataset):
         self.triplets = triplets
         self.num_entities = num_entities
 
-        # self.all_triplets = {t: True for t in all_triplets}
-
-        if not inverse:
-            raise NotImplementedError("TODO: Not implemented non-inverse test dataloader yet")
-        
         self._build_index(all_triplets)
 
 
@@ -54,55 +49,43 @@ class TestDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         """
-        Override prev implementation to help with filtered metrics
+        For inverse just returns info for the tail/subject
+        For non-inverse we return for both the head and tail
 
-        Add dimension to triplet to indicate whether it is a true triplet or not.
-        
-        True is denoted by 0 and False by 1
-        """
-        # corrupted_head_triplets = []
-        # corrupted_tail_triplets = []
-        # head, relation, tail = self.triplets[index]
+        Parameters:
+        -----------
+            index: int
+                index for specific triplet
 
-        # for e in range(self.num_entities):
-        #     corrupt_head = (e, relation, tail)
-        #     corrupt_tail = (head, relation, e)
-
-        #     if self.evaluation_method == "filtered":
-        #         corrupt_head_bit = int(self.all_triplets.get(corrupt_head) is None)
-        #         corrupt_tail_bit = int(self.all_triplets.get(corrupt_tail) is None)
-        #     else:
-        #         corrupt_head_bit = (e, relation, tail) != self.triplets[index]
-        #         corrupt_tail_bit = (head, relation, e) != self.triplets[index]
-
-        #     corrupted_head_triplets.append(corrupt_head + (corrupt_head_bit,))
-        #     corrupted_tail_triplets.append(corrupt_tail + (corrupt_tail_bit,))
-
-
-        # return torch.LongTensor(self.triplets[index]), torch.LongTensor(corrupted_head_triplets), torch.LongTensor(corrupted_tail_triplets)
-
-        # TODO: Implement for head/tail
-        # Only works for inverse here
-
+        Returns:
+        -------
+        tuple
+            - Tensor containing subject and relation 
+            - object ix
+            - Tensor versus all possible objects - whether a true fact
+        """        
         triple = torch.LongTensor(self.triplets[index])
-        
         rel_sub = torch.LongTensor([triple[1].item(), triple[0].item()])
-        possible_obj  = np.int32(self.index[(triple[1].item(), triple[0].item())])
-
-        label  = self.get_label(possible_obj)
-
-        return rel_sub, triple[2], label
+        rel_obj = torch.LongTensor([triple[1].item(), triple[2].item()])
 
 
-    @staticmethod
-    def collate_fn(self, data):
-        triple	= torch.stack([_[0] for _ in data], dim=0)
-        obj		= torch.stack([_[1] for _ in data], dim=0)
-        label	= torch.stack([_[2] for _ in data], dim=0)
+        # Labels for all possible objects for triplet (s, r, ?)
+        if self.inverse:
+            possible_obj  = np.int32(self.index[(triple[1].item(), triple[0].item())])
+            obj_label  = self.get_label(possible_obj)
 
-        return triple, obj, label
+            return rel_sub, triple[2], obj_label
+        
+        # For both (s, r, ?) and (?, r, o)
+        possible_obj  = np.int32(self.index[("tail", triple[1].item(), triple[0].item())])
+        possible_sub  = np.int32(self.index[("head", triple[1].item(), triple[2].item())])
+        obj_label  = self.get_label(possible_obj)
+        sub_label  = self.get_label(possible_sub)
+
+        return rel_sub, triple[2], obj_label, rel_obj, triple[0], sub_label 
 
 
+        
     def get_label(self, possible_obj):
         y = np.zeros([self.num_entities], dtype=np.float32)
         
@@ -110,6 +93,15 @@ class TestDataset(torch.utils.data.Dataset):
             y[o] = 1.0
         
         return torch.FloatTensor(y)
+
+
+    # @staticmethod
+    # def collate_fn(self, data):
+    #     triple	= torch.stack([_[0] for _ in data], dim=0)
+    #     obj		= torch.stack([_[1] for _ in data], dim=0)
+    #     label	= torch.stack([_[2] for _ in data], dim=0)
+
+    #     return triple, obj, label
 
 
 
