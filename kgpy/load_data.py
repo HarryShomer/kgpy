@@ -8,7 +8,6 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "kg_d
 
 
 
-
 class TestDataset(torch.utils.data.Dataset):
     """
     Dataset object for test data
@@ -32,6 +31,7 @@ class TestDataset(torch.utils.data.Dataset):
 
     def _build_index(self, triplets):
         """
+
         """
         self.index = defaultdict(list)
 
@@ -71,7 +71,7 @@ class TestDataset(torch.utils.data.Dataset):
 
         # Labels for all possible objects for triplet (s, r, ?)
         if self.inverse:
-            possible_obj  = np.int32(self.index[(triple[1].item(), triple[0].item())])
+            possible_obj = np.int32(self.index[(triple[1].item(), triple[0].item())])
             obj_label  = self.get_label(possible_obj)
 
             return rel_sub, triple[2], obj_label
@@ -113,12 +113,13 @@ class AllDataSet():
 
     def __init__(self, dataset_name, inverse=False, relation_pos="middle"):
         self.dataset_name = dataset_name
-        self.relation_pos = relation_pos
+        self.relation_pos = relation_pos.lower()
         self.inverse  = inverse
 
         self.entity2idx, self.relation2idx = self._load_mapping()
         self.entities, self.relations = list(set(self.entity2idx)), list(set(self.relation2idx))
 
+        self.num_entities = len(self.entities)
         self.num_relations = len(self.relations)
 
         self.triplets = {
@@ -129,13 +130,8 @@ class AllDataSet():
 
         if self.inverse:
             self.num_relations *= 2
+        
 
-
-
-    @property
-    def num_entities(self):
-        return len(self.entities)
-    
 
     @property
     def all_triplets(self):
@@ -155,13 +151,6 @@ class AllDataSet():
         print("No key with name", key)
 
         return None
-
-
-    def all_triplets_map(self):
-        """
-        Not a property for efficiency
-        """
-        return {t: True for t in self.all_triplets}
 
 
     def _load_mapping(self):
@@ -211,19 +200,44 @@ class AllDataSet():
             for line in file:
                 fields = [l.strip() for l in line.split()]
 
-                # When relation not in middle swap it there
-                if self.relation_pos.lower() != "middle":
+                # Stored in file as "s, o, r" instead of "s, r, o"
+                if self.relation_pos.lower() == "end":
                     fields[1], fields[2] = fields[2], fields[1]
 
                 triplets.append((self.entity2idx[fields[0]], self.relation2idx[fields[1]], self.entity2idx[fields[2]]))
             
+                # Add (o, r^-1, s)
                 if self.inverse:
-                    triplets.append((self.entity2idx[fields[0]], self.relation2idx[fields[1]] + self.num_relations, self.entity2idx[fields[2]]))
+                    triplets.append((self.entity2idx[fields[2]], self.relation2idx[fields[1]] + self.num_relations, self.entity2idx[fields[0]]))
 
-
+                
         return triplets
 
 
+    def get_edge_tensors(self, device='cuda'):
+        """
+        Create the edge_index and edge_type from the training data  
+
+        Parameters:
+        ----------
+            device: str
+                device to put edge tensors on
+
+        Returns:
+        --------
+        tuple
+            edge_index, edge_type    
+        """
+        edge_index, edge_type = [], []
+
+        for sub, rel, obj in self.triplets['train']:
+            edge_index.append((sub, obj))
+            edge_type.append(rel)
+
+        edge_index	= torch.LongTensor(edge_index).to(device)
+        edge_type = torch.LongTensor(edge_type).to(device)
+
+        return edge_index.transpose(0, 1), edge_type
 
 
 
@@ -236,16 +250,16 @@ class FB15K_237(AllDataSet):
     """
     Load the FB15k-237 dataset
     """
-    def __init__(self, inverse=False):
-        super().__init__("FB15K-237", inverse=inverse)
+    def __init__(self, **kwargs):
+        super().__init__("FB15K-237", **kwargs)
 
 
 class WN18RR(AllDataSet):
     """
     Load the WN18RR dataset
     """
-    def __init__(self, inverse=False):
-        super().__init__("WN18RR", inverse=inverse)
+    def __init__(self, **kwargs):
+        super().__init__("WN18RR", **kwargs)
 
 
 
@@ -253,13 +267,13 @@ class FB15K(AllDataSet):
     """
     Load the FB15k dataset
     """
-    def __init__(self, inverse=False):
-        super().__init__("FB15K", relation_pos="end", inverse=inverse)
+    def __init__(self, **kwargs):
+        super().__init__("FB15K", relation_pos="end", **kwargs)
 
 
 class WN18(AllDataSet):
     """
     Load the WN18 dataset
     """
-    def __init__(self, inverse=False):
-        super().__init__("WN18", relation_pos="end", inverse=inverse)
+    def __init__(self, **kwargs):
+        super().__init__("WN18", relation_pos="end", **kwargs)

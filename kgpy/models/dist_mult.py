@@ -17,7 +17,8 @@ class DistMult(SingleEmbeddingModel):
         regularization = 'l3',
         reg_weight = 1e-6,
         weight_init=None,
-        loss_fn="ranking"
+        loss_fn="ranking",
+        device='cpu'
     ):
         super().__init__(
             type(self).__name__,
@@ -29,7 +30,8 @@ class DistMult(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            True
+            True,
+            device
         )
 
 

@@ -13,6 +13,9 @@ from kgpy import sampling
 TENSORBOARD_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "runs")
 
 
+from time import time
+
+
 class Trainer:
     """
     Control training of model on a particular dataset
@@ -47,13 +50,13 @@ class Trainer:
             non_train_batch_size=64, 
             early_stopping=5, 
             save_every=25,
-            log_every_n_steps=25,
+            log_every_n_steps=100,
             negative_samples=1,
             eval_method="filtered",
             label_smooth=0
         ):
         """
-        Train and validate the model
+        Train, validate, and test the model
 
         Parameters:
         -----------
@@ -90,20 +93,23 @@ class Trainer:
         model_eval = Evaluation("valid", self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
 
         for epoch in range(1, epochs+1):
-            batch_loss = []
+            epoch_loss = torch.Tensor([0]).to(self.device)
+
             prog_bar = tqdm(sampler, file=sys.stdout)
             prog_bar.set_description(f"Epoch {epoch}")
             
             self.model.train()   
-
+            
             for batch in prog_bar:
+                batch_loss = self._train_batch(batch, train_method, label_smooth)
+                
                 step += 1
-                batch_loss.append(self._train_batch(batch, train_method, label_smooth))
+                epoch_loss += batch_loss
 
                 if step % log_every_n_steps == 0 and self.tensorboard:
-                    self.writer.add_scalar(f'training_loss', batch_loss[-1], global_step=step)
-
-            print("Epoch Loss:", np.mean(batch_loss))
+                    self.writer.add_scalar(f'training_loss', batch_loss.item(), global_step=step)
+            
+            print(f"Epoch {epoch} loss:", epoch_loss.item())
 
             if epoch % validate_every == 0:
                 val_mrr.append(self._validate_model(model_eval, epoch))
@@ -121,6 +127,9 @@ class Trainer:
             
             sampler.reset()
 
+
+        self._test_model(eval_method, non_train_batch_size)
+   
 
 
     def _train_batch(self, batch, train_method, label_smooth):
@@ -146,14 +155,18 @@ class Trainer:
         if train_method.upper() == "1-K":
             batch_loss = self._train_batch_1_to_k(batch, label_smooth)
         elif train_method.upper() == "1-N":
+            # start = time()
             batch_loss = self._train_batch_1_to_n(batch, label_smooth)
+            # print("Forward:", time() - start)
 
+        # start = time()
         batch_loss = batch_loss.mean()
         batch_loss.backward()
-
         self.optimizer.step()
+        # print("Loss:", time() - start)
 
-        return batch_loss.item()
+        # return batch_loss.item()
+        return batch_loss
 
 
     def _train_batch_1_to_k(self, batch, label_smooth): 
@@ -225,7 +238,9 @@ class Trainer:
         if label_smooth != 0.0:
             all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)
 
+
         return self.model.loss(all_scores=all_scores, all_targets=all_lbls)
+
 
 
     def _validate_model(self, model_eval, epoch):
@@ -258,6 +273,29 @@ class Trainer:
             print(f"  {k}: {round(v, 5)}")
 
         return results['mrr']
+    
+
+    def _test_model(self, eval_method, bs):
+        """
+        Evaluate model on the test set
+
+        Parameters:
+        -----------
+            eval_method: str
+                filtered or not
+            bs: int
+                batch size
+        
+        Returns:
+        --------
+        None
+        """
+        model_eval = Evaluation("test", self.data, self.data.inverse, eval_method=eval_method, bs=bs, device=self.device)
+        test_results = model_eval.evaluate(self.model)
+        
+        print("\nTest Results:", flush=True)
+        for k, v in test_results.items():
+            print(f"  {k}: {round(v, 5)}")
 
 
 

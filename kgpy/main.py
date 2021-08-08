@@ -90,12 +90,6 @@ def run_model(model, optimizer, data):
     model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
     model_trainer.fit(EPOCHS, TRAIN_BATCH_SIZE, **train_keywords)
 
-    # TODO: Move to Trainer?
-    model_eval = Evaluation("test", data, data.inverse, eval_method=args.evaluation_method, bs=TEST_VAL_BATCH_SIZE, device=DEVICE)
-    test_results = model_eval.evaluate(model)
-    
-    print("\nTest Results:", flush=True)
-    print(test_results)
 
 
 def parse_model_args():
@@ -109,7 +103,7 @@ def parse_model_args():
     dict
         Keyword arguments for model 
     """
-    model_params = {}
+    model_params = {"device": DEVICE}
 
     if args.lp is not None:
         model_params['regularization'] = f"l{args.lp}"
@@ -193,6 +187,10 @@ def get_model(data):
         model = models.RotatE(data.num_entities, data.num_relations, **model_params)
     elif model_name == "conve":
         model = models.ConvE(data.num_entities, data.num_relations, **model_params)
+    elif model_name == "compgcn":
+        # TODO: Bad Hack
+        edge_index, edge_type = data.get_edge_tensors(args.device)
+        model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=DEVICE)
     else:
         raise ValueError(f"Model `{model_name}` is not available. See kgpy/models for possible models.")
 

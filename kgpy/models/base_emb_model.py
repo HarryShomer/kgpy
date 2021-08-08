@@ -47,7 +47,8 @@ class EmbeddingModel(ABC, nn.Module):
         reg_weight,
         weight_init, 
         loss_fn,
-        norm_constraint   # TODO: Split by relation and entitiy? Also allow specfication of norm?
+        norm_constraint,   # TODO: Split by relation and entitiy? Also allow specfication of norm?
+        device
     ):
         """
         Model constructor
@@ -82,9 +83,10 @@ class EmbeddingModel(ABC, nn.Module):
         super(EmbeddingModel, self).__init__()
         
         self.name = model_name
-        self.dim = emb_dim
+        self.emb_dim = emb_dim
         self.weight_init = "uniform" if weight_init is None else weight_init.lower()
         self.norm_constraint = norm_constraint
+        self.device = device
 
         self.num_entities = num_entities
         self.num_relations = num_relations
@@ -343,7 +345,8 @@ class SingleEmbeddingModel(EmbeddingModel):
         reg_weight,
         weight_init, 
         loss_fn,
-        norm_constraint
+        norm_constraint,
+        device
     ):
         super().__init__(
             model_name, 
@@ -355,7 +358,8 @@ class SingleEmbeddingModel(EmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            norm_constraint
+            norm_constraint,
+            device
         )
         self.entity_embeddings, self.relation_embeddings = self._create_embeddings()
 
@@ -379,8 +383,8 @@ class SingleEmbeddingModel(EmbeddingModel):
         """
         weight_init_method = self._get_weight_init_method()
 
-        entity_emb = nn.Embedding(self.num_entities, self.dim)
-        relation_emb = nn.Embedding(self.num_relations, self.dim)
+        entity_emb = nn.Embedding(self.num_entities, self.emb_dim)
+        relation_emb = nn.Embedding(self.num_relations, self.emb_dim)
 
         weight_init_method(entity_emb.weight)
         weight_init_method(relation_emb.weight)
@@ -452,7 +456,7 @@ class SingleEmbeddingModel(EmbeddingModel):
         str
             device name
         """
-        return self.entity_embeddings.weight.device
+        return self.device
 
 
 #######################################################################################################
@@ -476,6 +480,7 @@ class ComplexEmbeddingModel(EmbeddingModel):
         weight_init, 
         loss_fn,
         norm_constraint,
+        device
     ):
         super().__init__(
             model_name, 
@@ -487,7 +492,8 @@ class ComplexEmbeddingModel(EmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            norm_constraint
+            norm_constraint,
+            device
         )
         
         self.entity_emb_re, self.entity_emb_im, self.relation_emb_re, self.relation_emb_im = self._create_embeddings()
@@ -512,10 +518,10 @@ class ComplexEmbeddingModel(EmbeddingModel):
         """
         weight_init_method = self._get_weight_init_method()
 
-        entity_emb_re = nn.Embedding(self.num_entities, self.dim)
-        relation_emb_re = nn.Embedding(self.num_relations, self.dim)
-        entity_emb_im = nn.Embedding(self.num_entities, self.dim)
-        relation_emb_im = nn.Embedding(self.num_relations, self.dim)
+        entity_emb_re = nn.Embedding(self.num_entities, self.emb_dim)
+        relation_emb_re = nn.Embedding(self.num_relations, self.emb_dim)
+        entity_emb_im = nn.Embedding(self.num_entities, self.emb_dim)
+        relation_emb_im = nn.Embedding(self.num_relations, self.emb_dim)
 
         weight_init_method(entity_emb_re.weight)
         weight_init_method(relation_emb_re.weight)
@@ -604,6 +610,6 @@ class ComplexEmbeddingModel(EmbeddingModel):
         str
             device name
         """
-        return self.entity_emb_re.weight.device
+        return self.device
 
 

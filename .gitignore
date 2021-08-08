@@ -8,6 +8,7 @@ notes.txt
 build/
 .pytest_cache
 *.sbatch
+run_compgcn.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -25,7 +25,8 @@ class RotatE(ComplexEmbeddingModel):
         regularization = None,
         reg_weight = 0,
         weight_init="normal",
-        loss_fn= "ranking"
+        loss_fn= "ranking",
+        device='cpu'
     ):
         super().__init__(
             type(self).__name__, 
@@ -38,6 +39,7 @@ class RotatE(ComplexEmbeddingModel):
             weight_init, 
             loss_fn,
             True,
+            device
         )
 
 

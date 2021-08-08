@@ -41,7 +41,6 @@ class BaseGNNModel(SingleEmbeddingModel):
             edge_type,
             num_layers,
             gcn_dim,
-            dropout,
 
             num_entities, 
             num_relations, 
@@ -51,7 +50,8 @@ class BaseGNNModel(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            norm_constraint
+            norm_constraint,
+            device
         ):
         """
         Model constructor
@@ -68,8 +68,6 @@ class BaseGNNModel(SingleEmbeddingModel):
                 Number of convolutional layers
             gcn_dim: int 
                 Dimenesion of GCN filters
-            dropout: float
-                Dropout to apply after each convolutional layer
             num_entities: iny
                 Number of entities 
             num_relations: int
@@ -103,13 +101,14 @@ class BaseGNNModel(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            norm_constraint
+            norm_constraint,
+            device
         )
         
         self.edge_index	= edge_index
         self.edge_type = edge_type
-        self.gcn_dim = self.emb_dim if self.num_layers == 1 else self.gcn_dim
-        self.drop = torch.nn.Dropout(dropout)
+        self.gcn_dim = self.emb_dim if num_layers == 1 else gcn_dim
+        self.num_layers = num_layers
         
 
 

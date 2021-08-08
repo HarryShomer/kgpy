@@ -24,7 +24,8 @@ class ConvE(SingleEmbeddingModel):
         regularization='l2',
         reg_weight=0,
         weight_init=None,
-        loss_fn="bce"
+        loss_fn="bce",
+        device='cpu'
     ):
         super().__init__(
             type(self).__name__,
@@ -36,7 +37,8 @@ class ConvE(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            True
+            True,
+            device
         )
         
         self.inp_drop = torch.nn.Dropout(input_drop)
@@ -99,9 +101,9 @@ class ConvE(SingleEmbeddingModel):
         x = F.relu(x)
         x = torch.mm(x, self.entity_embeddings.weight.transpose(1,0))
         x += self.b.expand_as(x)
-        pred = torch.sigmoid(x)
 
-        return pred
+        # No need to pass through sigmoid since loss (bce_w_logits applies it)
+        return x
 
 
     # TODO: For now just pass to score_hrt

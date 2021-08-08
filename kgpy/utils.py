@@ -35,7 +35,7 @@ def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suff
     torch.save({
         "model_state_dict": model_obj.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "latent_dim": model_obj.dim,
+        "latent_dim": model_obj.emb_dim,
         "loss_fn": model_obj.loss_fn.__class__.__name__,
         "regularization": model_obj.regularization,
         "reg_weight": model_obj.reg_weight,

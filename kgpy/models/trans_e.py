@@ -20,7 +20,8 @@ class TransE(SingleEmbeddingModel):
         reg_weight = 0,
         weight_init=None, 
         norm=2,
-        loss_fn="ranking"
+        loss_fn="ranking",
+        device='cpu'
     ):
         super().__init__(
             type(self).__name__,
@@ -32,7 +33,8 @@ class TransE(SingleEmbeddingModel):
             reg_weight,
             weight_init, 
             loss_fn,
-            True  # norm_constraint
+            True,  # norm_constraint
+            device
         )
         self.norm = norm
         

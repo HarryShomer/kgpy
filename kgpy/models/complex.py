@@ -19,7 +19,8 @@ class ComplEx(ComplexEmbeddingModel):
         regularization = 'l2',
         reg_weight = 1e-6,
         weight_init="normal",
-        loss_fn= "ranking"  #"softplus"
+        loss_fn= "ranking",  #"softplus",
+        device='cpu'
     ):
         super().__init__(
             type(self).__name__, 
@@ -32,6 +33,7 @@ class ComplEx(ComplexEmbeddingModel):
             weight_init, 
             loss_fn,
             True,
+            device
         )
 
 
