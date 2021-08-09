@@ -7,6 +7,9 @@ Models implemented so far:
 1. TransE
 2. DistMult
 3. ComplEx
+4. RotatE
+5. ConvE
+6. CompGCN
 
 Possible datasets to run on:
 
@@ -16,61 +19,53 @@ Possible datasets to run on:
 
 ### Usage
 
-You can run `kgpy/main.py` with the following command line argument options.
+Below is a minimal example showing how to train CompGCN on FB15K-237.
 
 ```
-usage: main.py [-h] [--epochs EPOCHS] [--batch-size BATCH_SIZE] [--learning-rate LEARNING_RATE] [--lp LP]
-               [--lp-weights LP_WEIGHTS [LP_WEIGHTS ...]] [--dim DIM] [--loss-fn LOSS_FN] [--negative-samples NEGATIVE_SAMPLES]
-               [--test-batch-size TEST_BATCH_SIZE] [--validation VALIDATION] [--early-stopping EARLY_STOPPING]
-               [--checkpoint-dir CHECKPOINT_DIR] [--tensorboard] [--log-training-loss LOG_TRAINING_LOSS] [--test-model]
-               model dataset
+import kgpy
 
-KG model and params to run
+lr = 1e-3
+epochs = 400
+batch_size = 128
+device = 'cuda'
 
-positional arguments:
-  model                 Model to run
-  dataset               Dataset to run it on
+# Get data. We are also including inverse/reciprocal triples
+data = kgpy.datasets.FB15K_237(inverse=True)
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --epochs EPOCHS       Number of epochs to run
-  --batch-size BATCH_SIZE
-                        Batch size to use for training
-  --learning-rate LEARNING_RATE
-                        Learning rate to use while training
-  --lp LP               LP regularization penalty to add to loss
-  --lp-weights LP_WEIGHTS [LP_WEIGHTS ...]
-                        LP regularization weights. Can give one or two.
-  --dim DIM             Latent dimension of entities and relations
-  --loss-fn LOSS_FN     Loss function to use.
-  --negative-samples NEGATIVE_SAMPLES
-                        Number of negative samples to use when training
-  --test-batch-size TEST_BATCH_SIZE
-                        Batch size to use for testing and validation
-  --validation VALIDATION
-                        Test on validation set every n epochs
-  --early-stopping EARLY_STOPPING
-                        Number of validation scores to wait for an increase before stopping
-  --checkpoint-dir CHECKPOINT_DIR
-                        Directory to store model checkpoints
-  --tensorboard         Whether to log to tensorboard
-  --log-training-loss LOG_TRAINING_LOSS
-                        Log training loss every n steps
-  --test-model          Evaluate all saved versions of a given model and dataset on the test set
+# Create our model and move to the gpu
+edge_index, edge_type = data.get_edge_tensors()
+model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, decoder="conve", device=device)
+model = model.to(device)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+# This will:
+# Train the model
+# Validate every 5 epochs
+# After training evaluate on the test set
+model_trainer = Trainer(model, optimizer, data)
+model_trainer.fit(epochs, batch_size)
 ```
 
-In order to work you must run it as a module. This is done like so
+#### CLI
+For quick usage you can run `kgpy/main.py` using a list of command line arguments.
+
+In order to work you must run it as a module.
 ```
 python -m kgpy.main [Insert CLI args]
 ```
 
+The full list of CLI args can be found by running `python -m kgpy.main --help`.
+
+NOTE: Running with the CLI is limited as not all options are available for each model.
+
+
 ### TODO:
 
-1. 1-N scoring
-2. Implement other KGEs
-3. Better documentation
-4. Convert evaluation to class and feed device
-5. Include inverse relations in dataset (need to be careful with 1-N training in this case)
+1. Implement other KGEs
+2. Better documentation (run as script)
+3. Memory keak in CompGCN aggregation layer
+
 
 ### Data
 

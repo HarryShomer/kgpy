@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 
 from kgpy import utils
 
+from time import time
+
 
 class Sampler(ABC):
     """
@@ -240,7 +242,6 @@ class One_to_N(Sampler):
         num_ents: int
             Total number of entities in dataset
     """
-    
     def __init__(self, triplets, batch_size, num_ents, device, inverse=False):
         super(One_to_N, self).__init__(triplets, batch_size, num_ents, device, inverse)
         self._shuffle()
@@ -283,7 +284,8 @@ class One_to_N(Sampler):
         self._increment_iter()
 
         if self.inverse:
-            batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
+            # batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
+            batch_ix  = torch.Tensor(batch_samples).to(self.device).long()
             batch_lbls = self._get_labels(batch_samples)
 
             return batch_ix, batch_lbls 

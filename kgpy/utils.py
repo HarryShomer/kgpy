@@ -1,6 +1,23 @@
 import os
+import gc
+import sys
 import torch
-from random import randint, choice
+import warnings
+from random import randint
+
+def get_mem():
+    """
+    Print all params and memory usage
+
+    **Used for debugging purposes**
+    """
+    warnings.filterwarnings("ignore", category=DeprecationWarning) 
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                print(obj.shape, type(obj), sys.getsizeof(obj.storage()))
+        except: pass
+
 
 
 class DataParallel(torch.nn.DataParallel):

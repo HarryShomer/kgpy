@@ -2,6 +2,7 @@ import os
 import sys
 import torch
 import numpy as np
+from torch._C import device
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
@@ -98,9 +99,12 @@ class Trainer:
             prog_bar = tqdm(sampler, file=sys.stdout)
             prog_bar.set_description(f"Epoch {epoch}")
             
-            self.model.train()   
+            self.model.train()
             
             for batch in prog_bar:
+                # print("--->", torch.cuda.memory_allocated(self.device), " | ", torch.cuda.max_memory_allocated(self.device))
+                # torch.cuda.reset_peak_memory_stats(self.device)
+
                 batch_loss = self._train_batch(batch, train_method, label_smooth)
                 
                 step += 1
@@ -108,7 +112,7 @@ class Trainer:
 
                 if step % log_every_n_steps == 0 and self.tensorboard:
                     self.writer.add_scalar(f'training_loss', batch_loss.item(), global_step=step)
-            
+                
             print(f"Epoch {epoch} loss:", epoch_loss.item())
 
             if epoch % validate_every == 0:
@@ -119,6 +123,7 @@ class Trainer:
                     print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!", flush=True)
                     break
 
+                #TODO: Needed?
                 # Only save when we know the model performs better
                 utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, self.checkpoint_dir)
 
@@ -155,17 +160,13 @@ class Trainer:
         if train_method.upper() == "1-K":
             batch_loss = self._train_batch_1_to_k(batch, label_smooth)
         elif train_method.upper() == "1-N":
-            # start = time()
             batch_loss = self._train_batch_1_to_n(batch, label_smooth)
-            # print("Forward:", time() - start)
-
-        # start = time()
+ 
         batch_loss = batch_loss.mean()
         batch_loss.backward()
-        self.optimizer.step()
-        # print("Loss:", time() - start)
 
-        # return batch_loss.item()
+        self.optimizer.step()
+
         return batch_loss
 
 

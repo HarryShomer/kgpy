@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-from kgpy.load_data import TestDataset
+from kgpy.datasets import TestDataset
 
 
 

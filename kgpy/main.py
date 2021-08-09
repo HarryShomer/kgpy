@@ -5,9 +5,8 @@ import numpy as np
 
 from kgpy import utils
 from kgpy import models
-from kgpy import load_data
+from kgpy import datasets
 from kgpy.training import Trainer
-from kgpy.evaluation import Evaluation
 
 
 parser = argparse.ArgumentParser(description='KG model and params to run')
@@ -67,7 +66,7 @@ def run_model(model, optimizer, data):
         pytorch model
     optimizer: torch.optim
         pytorch optimizer
-    data: load_data.AllDataset
+    data: datasets.AllDataset
         AllDataset object
 
     Returns:
@@ -163,7 +162,7 @@ def get_model(data):
 
     Parameters:
     -----------
-        data: load_data.AllDataset
+        data: datasets.AllDataset
             dataset model is running on
 
     Returns:
@@ -199,7 +198,7 @@ def get_model(data):
 
 
 def main():
-    data = getattr(load_data, args.dataset.upper())(inverse=args.inverse)
+    data = getattr(datasets, args.dataset.upper())(inverse=args.inverse)
 
     model = get_model(data)
     model = utils.DataParallel(model).to(DEVICE) if args.parallel else model.to(DEVICE)

@@ -11,6 +11,7 @@ from torch_scatter import scatter_add
 from torch_geometric.nn import MessagePassing
 
 from .base_gnn_model import BaseGNNModel
+from kgpy import utils
 
 
 
@@ -67,11 +68,10 @@ class CompGCN(BaseGNNModel):
         )
         self.margin = margin
         self.num_layers = num_layers
-        self.decoder = decoder
+        self.decoder = decoder.lower()
         self.comp_func = comp_func.lower()
         self.gcn_drop = torch.nn.Dropout(dropout)
         self.act = torch.tanh
-
 
         # Overwrite of entity & rel embedding defined in base
         # Easier to just keep as nn.Parameters instead of nn.Embedding
@@ -86,7 +86,6 @@ class CompGCN(BaseGNNModel):
 
         if num_bases > 0:
             raise NotImplementedError("TODO: Basis convolution")
-            # self.conv1 = CompGCNConvBasis(self.p.init_dim, self.gcn_dim, num_relations, num_bases, act=self.act)
         else:
             self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer_drop, device=self.device)
 
@@ -253,18 +252,19 @@ class CompGCNConv(MessagePassing):
         num_edges = edge_index.size(1) // 2
         rel_embed = torch.cat([rel_embed, self.loop_rel], dim=0)
 
-        self.in_index, self.out_index = edge_index[:, :num_edges], edge_index[:, num_edges:]
-        self.in_type,  self.out_type  = edge_type[:num_edges], 	 edge_type [num_edges:]
+        in_index, out_index = edge_index[:, :num_edges], edge_index[:, num_edges:]
+        in_type,  out_type  = edge_type[:num_edges], edge_type [num_edges:]
 
-        self.loop_index = torch.stack([torch.arange(num_ent), torch.arange(num_ent)]).to(self.device)
-        self.loop_type  = torch.full((num_ent,), rel_embed.size(0)-1, dtype=torch.long).to(self.device)
+        loop_index = torch.stack([torch.arange(num_ent), torch.arange(num_ent)]).to(self.device)
+        loop_type  = torch.full((num_ent,), rel_embed.size(0)-1, dtype=torch.long).to(self.device)
 
-        self.in_norm  = self.compute_norm(self.in_index,  num_ent)
-        self.out_norm = self.compute_norm(self.out_index, num_ent)
+        in_norm  = self.compute_norm(in_index,  num_ent)
+        out_norm = self.compute_norm(out_index, num_ent)
 
-        in_res	= self.propagate(self.in_index,  x=x, edge_type=self.in_type, rel_embed=rel_embed, edge_norm=self.in_norm, mode='in')
-        loop_res = self.propagate(self.loop_index, x=x, edge_type=self.loop_type, rel_embed=rel_embed, edge_norm=None, mode='loop')
-        out_res	= self.propagate(self.out_index,  x=x, edge_type=self.out_type,  rel_embed=rel_embed, edge_norm=self.out_norm, mode='out')
+        in_res	 = self.propagate(in_index,  x=x, edge_type=in_type, rel_embed=rel_embed, edge_norm=in_norm, mode='in')
+        loop_res = self.propagate(loop_index, x=x, edge_type=loop_type, rel_embed=rel_embed, edge_norm=None, mode='loop')
+        out_res	 = self.propagate(out_index,  x=x, edge_type=out_type,  rel_embed=rel_embed, edge_norm=out_norm, mode='out')
+
         out	= self.drop(in_res)*(1/3) + self.drop(out_res)*(1/3) + loop_res*(1/3)
 
         if self.bias: 
