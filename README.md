@@ -23,6 +23,7 @@ Below is a minimal example showing how to train CompGCN on FB15K-237.
 
 ```
 import kgpy
+import torch
 
 lr = 1e-3
 epochs = 400
@@ -34,7 +35,7 @@ data = kgpy.datasets.FB15K_237(inverse=True)
 
 # Create our model and move to the gpu
 edge_index, edge_type = data.get_edge_tensors()
-model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, decoder="conve", device=device)
+model = kgpy.models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, decoder="conve", device=device)
 model = model.to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -43,7 +44,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # Train the model
 # Validate every 5 epochs
 # After training evaluate on the test set
-model_trainer = Trainer(model, optimizer, data)
+model_trainer = kgpy.Trainer(model, optimizer, data)
 model_trainer.fit(epochs, batch_size)
 ```
 
