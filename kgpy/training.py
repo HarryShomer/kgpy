@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 import numpy as np
-from torch._C import device
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
@@ -46,7 +45,7 @@ class Trainer:
             self, 
             epochs, 
             train_batch_size, 
-            train_method=None,
+            train_method,
             validate_every=5, 
             non_train_batch_size=64, 
             early_stopping=5, 
@@ -66,7 +65,7 @@ class Trainer:
             train_batch_size: int
                 Batch size to use for training
             train_method: str
-                None or 1-N
+                1-K or 1-N
             validate_every: int
                 Validate every "n" epochs. Defaults to 5
             non_train_batch_size: int 
@@ -102,9 +101,6 @@ class Trainer:
             self.model.train()
             
             for batch in prog_bar:
-                # print("--->", torch.cuda.memory_allocated(self.device), " | ", torch.cuda.max_memory_allocated(self.device))
-                # torch.cuda.reset_peak_memory_stats(self.device)
-
                 batch_loss = self._train_batch(batch, train_method, label_smooth)
                 
                 step += 1

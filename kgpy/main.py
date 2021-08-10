@@ -74,7 +74,6 @@ def run_model(model, optimizer, data):
         None
     """
     train_keywords = {
-        "train_method": args.train_type,
         "validate_every": args.validation, 
         "non_train_batch_size": args.test_batch_size, 
         "early_stopping": args.early_stop, 
@@ -87,7 +86,7 @@ def run_model(model, optimizer, data):
     }
 
     model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
-    model_trainer.fit(EPOCHS, TRAIN_BATCH_SIZE, **train_keywords)
+    model_trainer.fit(EPOCHS, TRAIN_BATCH_SIZE, args.train_type, **train_keywords)
 
 
 

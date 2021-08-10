@@ -40,12 +40,10 @@ model = model.to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-# This will:
-# Train the model
-# Validate every 5 epochs
-# After training evaluate on the test set
+# Train using 1-N strategy
+# Will also evaluate on validation and test sets
 model_trainer = kgpy.Trainer(model, optimizer, data)
-model_trainer.fit(epochs, batch_size)
+model_trainer.fit(epochs, batch_size, "1-N")
 ```
 
 #### CLI
@@ -65,7 +63,8 @@ NOTE: Running with the CLI is limited as not all options are available for each 
 
 1. Implement other KGEs
 2. Better documentation (run as script)
-3. Memory keak in CompGCN aggregation layer
+3. Memory leak in CompGCN aggregation layer
+4. Provide cleaner implementation of BaseGNNModel
 
 
 ### Data

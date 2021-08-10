@@ -38,7 +38,7 @@ class CompGCN(BaseGNNModel):
         device='cuda',
         layer_drop=.1,
 
-        # Only applicable when decoderout = 'transe'
+        # Only applicable when decoder = 'transe'
         margin=9,   
 
         # Only applicable for conve...
@@ -81,12 +81,8 @@ class CompGCN(BaseGNNModel):
             raise NotImplementedError("TODO: Basis convolution")
             # self.relation_embeddings  = get_param((num_bases, self.emb_dim))
         else:
-            # Idk...this is how they have it
+            # Idk...this is how they have it for the rel params
             self.relation_embeddings = get_param((num_relations, self.emb_dim), self.device) if self.decoder == 'transe' else get_param((num_relations*2, self.emb_dim), self.device)
-
-        if num_bases > 0:
-            raise NotImplementedError("TODO: Basis convolution")
-        else:
             self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer_drop, device=self.device)
 
         if self.num_layers == 2:
@@ -179,7 +175,7 @@ class CompGCN(BaseGNNModel):
         else:
             raise ValueError(f"Invalid decoder - `{self.decoder}`!")
         
-        # No need to pass through sigmoid since loss (bce_w_logits applies it)
+        # No need to pass through sigmoid since loss (bce_w_logits) applies it
         return out
     
 
@@ -271,7 +267,17 @@ class CompGCNConv(MessagePassing):
             out = out + self.bias
         out = self.bn(out)
 
+        # Debugging!
+        # print("Allocated -->", torch.cuda.memory_allocated(self.device), " | ", torch.cuda.max_memory_allocated(self.device))
+        # torch.cuda.reset_peak_memory_stats(self.device)
+
+        # print("Reserved -->", torch.cuda.memory_reserved(self.device), " | ", torch.cuda.max_memory_reserved(self.device))
+        # torch.cuda.reset_max_memory_cached(self.device)
+
+        # torch.cuda.empty_cache()
+    
         return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
+
 
 
     def rel_transform(self, ent_embed, rel_embed):
@@ -294,9 +300,14 @@ class CompGCNConv(MessagePassing):
         weight 	= getattr(self, 'w_{}'.format(mode))
         rel_emb = torch.index_select(rel_embed, 0, edge_type)
         xj_rel  = self.rel_transform(x_j, rel_emb)
+
+        # TODO: This multiplication is causing high memory usage/allocation (and same for reserved/cache mem)
         out	= torch.mm(xj_rel, weight)
+        # out = torch.einsum('ij, jk -> ik', xj_rel, weight)
+        # out = x_j
 
         return out if edge_norm is None else out * edge_norm.view(-1, 1)
+
 
 
     def update(self, aggr_out):
