@@ -5,15 +5,13 @@ import numpy as np
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from kgpy.evaluation import Evaluation
 from kgpy import utils
 from kgpy import sampling
+from kgpy.evaluation import Evaluation
 
 
 TENSORBOARD_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "runs")
 
-
-from time import time
 
 
 class Trainer:
@@ -34,11 +32,17 @@ class Trainer:
         self.inverse = data.inverse
         self.optimizer = optimizer
         self.tensorboard = tensorboard
-        self.device = model._cur_device()
+        self.device = model.device
         self.checkpoint_dir = checkpoint_dir
+        self.start_time = utils.get_time()
 
         if tensorboard:
             self.writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
+
+
+    @property
+    def model_name(self):
+        return f"{self.model.name}_{self.start_time}"
 
 
     def fit(
@@ -47,7 +51,7 @@ class Trainer:
             train_batch_size, 
             train_method,
             validate_every=5, 
-            non_train_batch_size=64, 
+            non_train_batch_size=128, 
             early_stopping=5, 
             save_every=25,
             log_every_n_steps=100,
@@ -101,9 +105,8 @@ class Trainer:
             self.model.train()
             
             for batch in prog_bar:
-                batch_loss = self._train_batch(batch, train_method, label_smooth)
-                
                 step += 1
+                batch_loss = self._train_batch(batch, train_method, label_smooth)
                 epoch_loss += batch_loss
 
                 if step % log_every_n_steps == 0 and self.tensorboard:
@@ -119,12 +122,11 @@ class Trainer:
                     print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!", flush=True)
                     break
 
-                #TODO: Needed?
                 # Only save when we know the model performs better
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, self.checkpoint_dir)
+                utils.save_model(self.model, self.optimizer, epoch, self.data, self.checkpoint_dir, self.model_name)
 
             if epoch % save_every == 0:
-                utils.save_model(self.model, self.optimizer, epoch, step, self.data.dataset_name, self.checkpoint_dir, suffix=f"epoch_{epoch}")
+                utils.save_model(self.model, self.optimizer, epoch, self.data, self.checkpoint_dir, f"{self.model_name}_epoch-{epoch}")
             
             sampler.reset()
 
@@ -266,8 +268,7 @@ class Trainer:
             self.writer.add_scalar('MRR'     , results['mrr'], epoch)
         
         print(f"Epoch {epoch} validation:")
-        for k, v in results.items():
-            print(f"  {k}: {round(v, 5)}")
+        model_eval.print_results(results)
 
         return results['mrr']
     
@@ -291,8 +292,7 @@ class Trainer:
         test_results = model_eval.evaluate(self.model)
         
         print("\nTest Results:", flush=True)
-        for k, v in test_results.items():
-            print(f"  {k}: {round(v, 5)}")
+        model_eval.print_results(test_results)
 
 
 

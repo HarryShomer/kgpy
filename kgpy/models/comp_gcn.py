@@ -30,13 +30,13 @@ class CompGCN(BaseGNNModel):
         num_bases=0,
         num_layers=2,
         gcn_dim=200,
-        dropout=.1,
         emb_dim=200, 
-        regularization = None,
-        reg_weight = 0,
+        weight_init="normal",
         loss_fn="bce",
         device='cuda',
-        layer_drop=.1,
+        layer1_drop=.3,
+        layer2_drop=.3,
+        gcn_drop=.1,
 
         # Only applicable when decoder = 'transe'
         margin=9,   
@@ -51,46 +51,38 @@ class CompGCN(BaseGNNModel):
     ):
         super().__init__(
             type(self).__name__,
-            edge_index = edge_index, 
-            edge_type = edge_type,
-            num_layers = num_layers,
-            gcn_dim = gcn_dim,
-            num_entities = num_entities, 
-            num_relations = num_relations, 
-            emb_dim = emb_dim,
-            loss_margin = 0, 
-            regularization = regularization, 
-            reg_weight =  reg_weight,
-            weight_init = None, 
-            loss_fn = loss_fn,
-            norm_constraint =  False,
-            device=device
+            edge_index, 
+            edge_type,
+            num_layers,
+            gcn_dim,
+            num_entities, 
+            num_relations, 
+            emb_dim, 
+            weight_init, 
+            loss_fn,
+            device
         )
         self.margin = margin
         self.num_layers = num_layers
         self.decoder = decoder.lower()
         self.comp_func = comp_func.lower()
-        self.gcn_drop = torch.nn.Dropout(dropout)
+        self.gcn_drop = torch.nn.Dropout(gcn_drop)
         self.act = torch.tanh
 
-        # Overwrite of entity & rel embedding defined in base
-        # Easier to just keep as nn.Parameters instead of nn.Embedding
-        self.entity_embeddings = get_param((num_entities, self.emb_dim), self.device)
-        
+    
         if num_bases > 0:
             raise NotImplementedError("TODO: Basis convolution")
             # self.relation_embeddings  = get_param((num_bases, self.emb_dim))
         else:
             # Idk...this is how they have it for the rel params
-            self.relation_embeddings = get_param((num_relations, self.emb_dim), self.device) if self.decoder == 'transe' else get_param((num_relations*2, self.emb_dim), self.device)
-            self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer_drop, device=self.device)
+            # self.relation_embeddings = get_param((num_relations, self.emb_dim), self.device) if self.decoder == 'transe' else get_param((num_relations*2, self.emb_dim), self.device)
+            self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer1_drop, device=self.device)
 
         if self.num_layers == 2:
-            self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer_drop, device=self.device)
+            self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer2_drop, device=self.device)
 
         self.register_parameter('bias', nn.Parameter(torch.zeros(self.num_entities).to(self.device)))
 
-        # TODO: Use models.ConvE instead. Will need to share ent/rel embedding
         # Additional params for conve
         if self.decoder == "conve":
             self.conve_drop1 = torch.nn.Dropout(conve_drop1)
@@ -173,7 +165,7 @@ class CompGCN(BaseGNNModel):
             out = torch.mm(out, ent_embs.transpose(1,0))
             out += self.bias.expand_as(out)
         else:
-            raise ValueError(f"Invalid decoder - `{self.decoder}`!")
+            raise ValueError(f"Invalid decoder for CompGCN - `{self.decoder}`!")
         
         # No need to pass through sigmoid since loss (bce_w_logits) applies it
         return out
@@ -266,21 +258,15 @@ class CompGCNConv(MessagePassing):
         if self.bias: 
             out = out + self.bias
         out = self.bn(out)
-
-        # Debugging!
-        # print("Allocated -->", torch.cuda.memory_allocated(self.device), " | ", torch.cuda.max_memory_allocated(self.device))
-        # torch.cuda.reset_peak_memory_stats(self.device)
-
-        # print("Reserved -->", torch.cuda.memory_reserved(self.device), " | ", torch.cuda.max_memory_reserved(self.device))
-        # torch.cuda.reset_max_memory_cached(self.device)
-
-        # torch.cuda.empty_cache()
     
         return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
 
 
     def rel_transform(self, ent_embed, rel_embed):
+        """
+        Compositional function used in aggregation
+        """
         if self.comp_func == 'corr': 	
             trans_embed  = ccorr(ent_embed, rel_embed)
         elif self.comp_func == 'sub': 
@@ -301,10 +287,7 @@ class CompGCNConv(MessagePassing):
         rel_emb = torch.index_select(rel_embed, 0, edge_type)
         xj_rel  = self.rel_transform(x_j, rel_emb)
 
-        # TODO: This multiplication is causing high memory usage/allocation (and same for reserved/cache mem)
         out	= torch.mm(xj_rel, weight)
-        # out = torch.einsum('ij, jk -> ik', xj_rel, weight)
-        # out = x_j
 
         return out if edge_norm is None else out * edge_norm.view(-1, 1)
 

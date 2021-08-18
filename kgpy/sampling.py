@@ -1,3 +1,6 @@
+"""
+Sampling strategies for training
+"""
 import copy
 import torch
 import random
@@ -6,8 +9,6 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 
 from kgpy import utils
-
-from time import time
 
 
 class Sampler(ABC):
@@ -143,10 +144,7 @@ class One_to_K(Sampler):
     def __init__(self, triplets, batch_size, num_ents, device, num_negative=1, inverse=False):
         super(One_to_K, self).__init__(triplets, batch_size, num_ents, device, inverse)
 
-        self.num_negative = num_negative
-        if self.num_negative > 1:
-            raise NotImplemented("`num_negative` can only be 1. Need to implement > 1")
-        
+        self.num_negative = num_negative        
         self._shuffle()
 
 

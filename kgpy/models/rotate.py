@@ -52,7 +52,7 @@ class RotatE(ComplexEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [sub, rel, obj]
 
         Returns:
         --------
@@ -85,7 +85,7 @@ class RotatE(ComplexEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, object]
 
         Returns:
         --------
@@ -108,7 +108,7 @@ class RotatE(ComplexEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, subject]
 
         Returns:
         --------

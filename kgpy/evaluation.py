@@ -6,7 +6,6 @@ from tqdm import tqdm
 from kgpy.datasets import TestDataset
 
 
-
 class Evaluation:
 
     def __init__(self, split, all_data, inverse, eval_method='filtered', bs=128, device='cpu'):
@@ -27,6 +26,24 @@ class Evaluation:
         return self.data[self.split]
 
 
+    def print_results(self, results):
+        """
+        Print the results of a given evaluation in a clean fashion
+
+        Parameters:
+        ----------
+            results: dict
+                Should be output of `self.evaluate`
+        
+        Returns:
+        --------
+        None
+        """
+        metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
+
+        for k in metrics:
+            print(f"  {k}: {round(results[k], 5)}")
+
 
     def evaluate(self, model):
         """
@@ -42,7 +59,7 @@ class Evaluation:
         dict
             eval metrics
         """
-        metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
+        metrics = ["steps", "samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
         results = {m : 0 for m in metrics}
 
         dataloader = torch.utils.data.DataLoader(
@@ -54,12 +71,10 @@ class Evaluation:
         model.eval()
         with torch.no_grad():
 
-            steps = 0
             prog_bar = tqdm(dataloader, file=sys.stdout)
             prog_bar.set_description(f"Evaluating model")
 
             for batch in prog_bar:
-                steps += 1
                 tail_trips, obj, tail_lbls = batch[0].to(self.device), batch[1].to(self.device), batch[2].to(self.device)
 
                 if not self.inverse:
@@ -75,8 +90,9 @@ class Evaluation:
                     self.calc_metrics(preds, obj, tail_lbls, results)
 
         ### Average out results
-        results['mr']  = results['mr']  / steps 
-        results['mrr'] = results['mrr'] / steps * 100
+        # TODO: Is this correct for 1-K?
+        results['mr']  = results['mr']  / results['steps'] 
+        results['mrr'] = results['mrr'] / results['steps']  * 100
 
         for k in self.hits_k_vals:
             results[f'hits@{k}'] = results[f'hits@{k}'] / results['samples'] * 100
@@ -122,6 +138,7 @@ class Evaluation:
         ranks = 1 + torch.argsort(torch.argsort(preds, dim=1, descending=True), dim=1, descending=False)[b_range, ent]
         ranks = ranks.float()
 
+        results['steps']   += 1
         results['samples'] += torch.numel(ranks) 
         results['mr']      += torch.mean(ranks).item() 
         results['mrr']     += torch.mean(1.0/ranks).item()

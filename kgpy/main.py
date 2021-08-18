@@ -1,7 +1,6 @@
 import os
 import torch
 import argparse
-import numpy as np 
 
 from kgpy import utils
 from kgpy import models
@@ -25,8 +24,8 @@ parser.add_argument("--label-smooth", help="label smoothing", default=0, type=fl
 parser.add_argument("--lp", help="LP regularization penalty to add to loss", type=int, default=None)
 parser.add_argument("--lp-weights", help="LP regularization weights. Can give one or two.", nargs='+', default=None)
 parser.add_argument("--dim", help="Latent dimension of entities and relations", type=int, default=None)
-parser.add_argument("--loss", help="Loss function to use.", default=None)
-parser.add_argument("--negative-samples", help="Number of negative samples to using 1-K training", default=1, type=int)
+parser.add_argument("--loss", help="Loss function to use.", default="bce")
+parser.add_argument("--neg-samples", help="Number of negative samples to using 1-K training", default=1, type=int)
 parser.add_argument("--loss-margin", help="If ranking is loss a margin can be sepcified", default=None, type=int)
 parser.add_argument("--transe-norm", help="Norm used for distance function on TransE", default=2, type=int)
 
@@ -43,16 +42,10 @@ parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metr
 
 args = parser.parse_args()
 
-# Constants
-DEVICE = args.device
-EPOCHS = args.epochs
-TRAIN_BATCH_SIZE = args.batch_size
-LEARNING_RATE = args.lr
-EVERY_N_EPOCHS_VAL = args.validation   
-LAST_N_VAL = args.early_stop           
-TEST_VAL_BATCH_SIZE = args.test_batch_size    # Batch size for test and validation testing
-EVERY_N_STEPS_TRAIN = args.log_training_loss  # Write training loss to tensorboard every N steps
-CHECKPOINT_DIR = args.checkpoint_dir  
+
+if args.loss.lower() == "ranking" and args.neg_samples > 1:
+    raise NotImplementedError("TODO: Ranking loss with > 1 negative samples")
+
 
 
 
@@ -77,7 +70,7 @@ def run_model(model, optimizer, data):
         "validate_every": args.validation, 
         "non_train_batch_size": args.test_batch_size, 
         "early_stopping": args.early_stop, 
-        "negative_samples": args.negative_samples,
+        "negative_samples": args.neg_samples,
         "log_every_n_steps": args.log_training_loss,
         "save_every": args.save_every,
         "eval_method": args.evaluation_method,
@@ -85,8 +78,8 @@ def run_model(model, optimizer, data):
         # "decay": args.decay
     }
 
-    model_trainer = Trainer(model, optimizer, data, CHECKPOINT_DIR, tensorboard=args.tensorboard)
-    model_trainer.fit(EPOCHS, TRAIN_BATCH_SIZE, args.train_type, **train_keywords)
+    model_trainer = Trainer(model, optimizer, data, args.checkpoint_dir, tensorboard=args.tensorboard)
+    model_trainer.fit(args.epochs, args.batch_size, args.train_type, **train_keywords)
 
 
 
@@ -101,7 +94,7 @@ def parse_model_args():
     dict
         Keyword arguments for model 
     """
-    model_params = {"device": DEVICE}
+    model_params = {"device": args.device}
 
     if args.lp is not None:
         model_params['regularization'] = f"l{args.lp}"
@@ -143,11 +136,11 @@ def get_optimizer(model):
     optimizer_name = args.optimizer.lower()
 
     if optimizer_name == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     elif optimizer_name == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     elif optimizer_name == "adagrad":
-        optimizer = torch.optim.Adagrad(model.parameters(), lr=LEARNING_RATE)   
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=args.lr)   
     else:
         raise ValueError(f"Optimizer `{optimizer_name}` is not available. Must be one of ['Adam', 'SGD', 'Adagrad']")
 
@@ -172,7 +165,7 @@ def get_model(data):
     model_name = args.model.lower()
     model_params = parse_model_args()
 
-    # todo needs to be case insesitive
+    # TODO: needs to be case insesitive
     # model = getattr(models, model_name)(data.num_entities, data.num_relations, **model_params)
 
     if model_name == "transe":
@@ -186,9 +179,9 @@ def get_model(data):
     elif model_name == "conve":
         model = models.ConvE(data.num_entities, data.num_relations, **model_params)
     elif model_name == "compgcn":
-        # TODO: Bad Hack
+
         edge_index, edge_type = data.get_edge_tensors(args.device)
-        model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=DEVICE)
+        model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=args.device)
     else:
         raise ValueError(f"Model `{model_name}` is not available. See kgpy/models for possible models.")
 
@@ -200,7 +193,7 @@ def main():
     data = getattr(datasets, args.dataset.upper())(inverse=args.inverse)
 
     model = get_model(data)
-    model = utils.DataParallel(model).to(DEVICE) if args.parallel else model.to(DEVICE)
+    model = utils.DataParallel(model).to(args.device) if args.parallel else model.to(args.device)
     optimizer = get_optimizer(model)
 
     run_model(model, optimizer, data)

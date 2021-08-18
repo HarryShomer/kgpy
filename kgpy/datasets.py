@@ -4,7 +4,7 @@ import numpy as np
 from collections import defaultdict
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "kg_datasets")
+DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "datasets")
 
 
 
@@ -93,15 +93,6 @@ class TestDataset(torch.utils.data.Dataset):
             y[o] = 1.0
         
         return torch.FloatTensor(y)
-
-
-    # @staticmethod
-    # def collate_fn(self, data):
-    #     triple	= torch.stack([_[0] for _ in data], dim=0)
-    #     obj		= torch.stack([_[1] for _ in data], dim=0)
-    #     label	= torch.stack([_[2] for _ in data], dim=0)
-
-    #     return triple, obj, label
 
 
 
@@ -214,12 +205,14 @@ class AllDataSet():
         return triplets
 
 
-    def get_edge_tensors(self, device='cuda'):
+    def get_edge_tensors(self, rand_edge_perc=0, device='cuda'):
         """
         Create the edge_index and edge_type from the training data  
 
         Parameters:
         ----------
+            rand_edge_perc: float
+                Percentage of random edges to add. E.g. when .5 add .5m new edges (where m = # of edges)
             device: str
                 device to put edge tensors on
 
@@ -228,16 +221,79 @@ class AllDataSet():
         tuple
             edge_index, edge_type    
         """
+        new_edges = 0
         edge_index, edge_type = [], []
 
-        for sub, rel, obj in self.triplets['train']:
+        if self.inverse:
+            num_rels = int(self.num_relations / 2)
+            non_inv_edges = [e for e in self.triplets['train'] if e[1] < num_rels]
+        else:
+            num_rels = self.num_relations
+            non_inv_edges = self.triplets['train']
+
+        num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
+        num_keep_edges = int(len(non_inv_edges) * (1 - rand_edge_perc))
+
+        np.random.shuffle(non_inv_edges)
+
+        for sub, rel, obj in non_inv_edges[:num_keep_edges]:
             edge_index.append((sub, obj))
             edge_type.append(rel)
+
+            if self.inverse:
+                edge_index.append((obj, sub))
+                edge_type.append(rel + num_rels)
+
+        triplets_set = set(self.all_triplets)
+        
+        # Add original edges
+        # for sub, rel, obj in self.triplets['train']:
+        #     edge_index.append((sub, obj))
+        #     edge_type.append(rel)
+
+        # Add random edges
+        while new_edges < num_rand_edges and num_rand_edges != 0:
+            # Ensure new edge doesn't exist in the *entire* dataset nor repeats among randoms
+            # if (s, r, o) not in triplets_set:
+            # triplets_set.add((s, r, o))
+            # edge_index.append((s, o))
+            # edge_type.append(r)
+
+            self._generate_rand_edge(edge_index, edge_type)
+            new_edges += 1
+        
+        # for a, b in zip(edge_index, edge_type):
+        #     # print((a[0], b, a[1]))
+        #     if (a[0], b, a[1]) in triplets_set:
+        #         print("Queso!")
 
         edge_index	= torch.LongTensor(edge_index).to(device)
         edge_type = torch.LongTensor(edge_type).to(device)
 
         return edge_index.transpose(0, 1), edge_type
+
+
+
+    def _generate_rand_edge(self, edge_index, edge_type):
+        """
+        Modify in place!
+        """
+        num_rels = int(self.num_relations / 2) if self.inverse else self.num_relations
+
+        r  = np.random.randint(num_rels)
+        s = np.random.randint(self.num_entities)
+        o = np.random.randint(self.num_entities)
+
+        edge_index.append((s, o))
+        edge_type.append(r)
+
+        if self.inverse:
+            edge_index.append((o, s))
+            edge_type.append(r + num_rels)
+        
+
+
+
 
 
 

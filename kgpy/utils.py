@@ -4,6 +4,20 @@ import sys
 import torch
 import warnings
 from random import randint
+from datetime import datetime
+
+
+class DataParallel(torch.nn.DataParallel):
+    """
+    Extend DataParallel class to access model level attributes/methods
+    """
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+
 
 def get_mem():
     """
@@ -20,28 +34,12 @@ def get_mem():
 
 
 
-class DataParallel(torch.nn.DataParallel):
-    """
-    Extend DataParallel class to access model level attributes/methods
-    """
-    def __getattr__(self, name):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.module, name)
-
-
-
-def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suffix=""):
+def save_model(model, optimizer, epoch, data, checkpoint_dir, model_name):
     """
     Save the given model's state
     """
-    suffix = "_" + str(suffix) if len(str(suffix)) > 0 else str(suffix)
-
-    if not os.path.isdir(checkpoint_dir):
-        os.mkdir(checkpoint_dir)
-    if not os.path.isdir(os.path.join(checkpoint_dir, dataset_name)):
-        os.mkdir(os.path.join(checkpoint_dir, dataset_name))
+    if not os.path.isdir(os.path.join(checkpoint_dir, data.dataset_name)):
+        os.makedirs(os.path.join(checkpoint_dir, data.dataset_name), exist_ok=True)
 
     # If wrapped in DataParallel object this is how we access the underlying model
     if isinstance(model, DataParallel):
@@ -54,12 +52,12 @@ def save_model(model, optimizer, epoch, step, dataset_name, checkpoint_dir, suff
         "optimizer_state_dict": optimizer.state_dict(),
         "latent_dim": model_obj.emb_dim,
         "loss_fn": model_obj.loss_fn.__class__.__name__,
-        "regularization": model_obj.regularization,
-        "reg_weight": model_obj.reg_weight,
         "epoch": epoch,
-        "step": step
+        "inverse": data.inverse
+        # "regularization": model_obj.regularization,
+        # "reg_weight": model_obj.reg_weight,
         }, 
-        os.path.join(checkpoint_dir, dataset_name, f"{model.name}{suffix}.tar")
+        os.path.join(checkpoint_dir, data.dataset_name, f"{model_name}.tar")
     )
 
 
@@ -73,9 +71,8 @@ def load_model(model, optimizer, dataset_name, checkpoint_dir, epoch=None):
         file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}_epoch_{epoch}.tar")
 
     if not os.path.isfile(file_path):
-        print(f"The model checkpoint for {model.name} at epoch {epoch} was never saved.")
+        print(f"The file {file_path} doesn't exist")
         return None, None
-
 
     # If wrapped in DataParallel object this is how we access the underlying model
     if isinstance(model, DataParallel):
@@ -85,7 +82,7 @@ def load_model(model, optimizer, dataset_name, checkpoint_dir, epoch=None):
 
     checkpoint = torch.load(file_path)
     model_obj.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizersstate_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     return model_obj, optimizer
 
@@ -121,3 +118,5 @@ def randint_exclude(begin, end, exclude):
             return x
 
 
+def get_time():
+    return datetime.strftime(datetime.now(), "%Y-%m-%dT%H%M%S")

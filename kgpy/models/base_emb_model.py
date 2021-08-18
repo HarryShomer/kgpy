@@ -52,33 +52,6 @@ class EmbeddingModel(ABC, nn.Module):
     ):
         """
         Model constructor
-
-        Parameters:
-        -----------
-            model_name: str
-                Name of model
-            num_entities: iny
-                Number of entities 
-            num_relations: int
-                Number of relations
-            emb_dim: int
-                hidden dimension
-            loss_margin: int
-                margin to use if using a margin-based loss
-            regularization: str 
-                Type of regularization. One of [None, 'l1', 'l2', 'l3']
-            reg_weight: list/float
-                Regularization weights. When list 1st entry is weight for entities and 2nd for relation embeddings.
-            weight_init: str
-                weight_init method to use
-            loss_fn: str
-                name of loss function to use
-            norm_constraint: bool
-                Whether Take norm of entities after each gradient and relations at beginning       
-
-        Returns:
-        --------
-        None
         """
         super(EmbeddingModel, self).__init__()
         
@@ -219,7 +192,7 @@ class EmbeddingModel(ABC, nn.Module):
         pass
 
 
-    def forward(self, triplets, mode=None):
+    def forward(self, triplets, mode=None, **kwargs):
         """
         Forward pass for our model.
         1. Normalizes entity embeddings to unit length if specified

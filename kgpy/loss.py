@@ -133,6 +133,7 @@ class BCELoss(Loss):
         else:
             all_scores  = kwargs['all_scores']
             all_targets = kwargs['all_targets']
+        
 
         return F.binary_cross_entropy_with_logits(all_scores, all_targets, reduction='mean')
 

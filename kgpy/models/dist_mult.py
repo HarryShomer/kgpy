@@ -9,7 +9,8 @@ from .base_emb_model import SingleEmbeddingModel
 
 
 class DistMult(SingleEmbeddingModel):
-    def __init__(self, 
+    def __init__(
+        self, 
         num_entities, 
         num_relations, 
         emb_dim=100, 
@@ -42,7 +43,7 @@ class DistMult(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [sub, rel, obj]
 
         Returns:
         --------
@@ -63,7 +64,7 @@ class DistMult(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, object]
 
         Returns:
         --------
@@ -84,7 +85,7 @@ class DistMult(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, subject]
 
         Returns:
         --------

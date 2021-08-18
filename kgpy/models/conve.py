@@ -67,26 +67,25 @@ class ConvE(SingleEmbeddingModel):
         self.fc = torch.nn.Linear(self.hidden_size, emb_dim)
 
 
-    def score_hrt(self, triplets):
+    def score_function(self, e1, rel):
         """
-        Pass through ConvE.
-
-        Note: Only work for 1-N
+        Scoring process of triplets
 
         Parameters:
         -----------
-            triplets: list
-                List of triplets (rel, head)
-
+            e1: torch.Tensor
+                entities passed through ConvE
+            e2: torch.Tensor
+                entities scored against for link prediction
+            rel: torch.Tensor
+                relaitons passed through ConvE
+        
         Returns:
         --------
-        Tensor
-            List of scores for triplets
+        torch.Tensor
+            Raw scores to be passed to loss
         """
-        e1_embedded  = self.entity_embeddings(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
-        rel_embedded = self.relation_embeddings(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
-
-        triplets = torch.cat([e1_embedded, rel_embedded], 2)
+        triplets = torch.cat([e1, rel], 2)
 
         stacked_inputs = self.bn0(triplets)
         x= self.inp_drop(stacked_inputs)
@@ -99,14 +98,45 @@ class ConvE(SingleEmbeddingModel):
         x = self.hidden_drop(x)
         x = self.bn2(x)
         x = F.relu(x)
-        x = torch.mm(x, self.entity_embeddings.weight.transpose(1,0))
-        x += self.b.expand_as(x)
+
+        return x
+
+
+    def score_hrt(self, triplets):
+        """
+        Pass through ConvE.
+
+        Note: Only work for 1-N
+
+        Parameters:
+        -----------
+            triplets: list
+                List of triplets of form (sub, rel, obj)
+
+        Returns:
+        --------
+        Tensor
+            List of scores for triplets
+        """
+        e1_embedded  = self.entity_embeddings(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
+        rel_embedded = self.relation_embeddings(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
+
+        # Each must only be multiplied by entity belong to *own* triplet!!!
+        e2_embedded  = self.entity_embeddings(triplets[:, 2])
+
+        x = self.score_function(e1_embedded, rel_embedded)
+
+        # Again, they should should only multiply with own entities
+        # This is the diagonal of the matrix product in 1-N
+        x = (x * e2_embedded).sum(dim=1).reshape(-1, 1)
+
+        # TODO: ???
+        # x += self.b.expand_as(x)
 
         # No need to pass through sigmoid since loss (bce_w_logits applies it)
         return x
 
 
-    # TODO: For now just pass to score_hrt
     def score_head(self, triplets):
         """
         Get the score for a given set of triplets against *all possible* heads.
@@ -114,17 +144,25 @@ class ConvE(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form (rel, obj)
 
         Returns:
         --------
         Tensor
             List of scores for triplets
         """
-        return self.score_hrt(triplets)
+        e1_embedded  = self.entity_embeddings(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
+        rel_embedded = self.relation_embeddings(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
 
+        x = self.score_function(e1_embedded, rel_embedded)
 
-    # TODO: For now just pass to score_hrt
+        x = torch.mm(x, self.entity_embeddings.weight.transpose(1,0))
+        x += self.b.expand_as(x)
+
+        return x
+
+        
+    # TODO: For now just pass to score_head since same
     def score_tail(self, triplets):
         """
         Get the score for a given set of triplets against *all possible* tails.
@@ -132,11 +170,11 @@ class ConvE(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form (rel, sub)
 
         Returns:
         --------
         Tensor
             List of scores for triplets
         """
-        return self.score_hrt(triplets)
+        return self.score_head(triplets)

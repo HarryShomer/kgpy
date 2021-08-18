@@ -48,7 +48,7 @@ class TransE(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [sub, rel, obj]
 
         Returns:
         --------
@@ -71,7 +71,7 @@ class TransE(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, object]
 
         Returns:
         --------
@@ -94,7 +94,7 @@ class TransE(SingleEmbeddingModel):
         Parameters:
         -----------
             triplets: list
-                List of triplets
+                List of triplets of form [rel, subject]
 
         Returns:
         --------
