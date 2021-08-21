@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import numpy as np
 from collections import defaultdict
 
@@ -101,14 +102,24 @@ class AllDataSet():
     """
     Base class for all possible datasets
     """
-
-    def __init__(self, dataset_name, inverse=False, relation_pos="middle"):
+    def __init__(
+        self, 
+        dataset_name, 
+        inverse=False, 
+        relation_pos="middle",
+        perc_rels=1,
+        perc_ents=1
+    ):
         self.dataset_name = dataset_name
         self.relation_pos = relation_pos.lower()
         self.inverse  = inverse
+        self.perc_rels, self.perc_ents = perc_rels, perc_ents
 
         self.entity2idx, self.relation2idx = self._load_mapping()
         self.entities, self.relations = list(set(self.entity2idx)), list(set(self.relation2idx))
+
+        # Updates self.entities and self.relations
+        self.prune_dataset()
 
         self.num_entities = len(self.entities)
         self.num_relations = len(self.relations)
@@ -147,6 +158,9 @@ class AllDataSet():
     def _load_mapping(self):
         """
         Load the mappings for the relations and entities from file
+
+        key = name
+        value = id
 
         Returns:
         --------
@@ -187,6 +201,10 @@ class AllDataSet():
         """
         triplets = []
 
+        # Make lookup O(1)
+        ent_set = set(range(0, len(self.entities)))
+        rel_set = set(range(0, len(self.relations)))
+
         with open(os.path.join(DATA_DIR, self.dataset_name, f"{data_split}.txt"), "r") as file:
             for line in file:
                 fields = [l.strip() for l in line.split()]
@@ -194,14 +212,20 @@ class AllDataSet():
                 # Stored in file as "s, o, r" instead of "s, r, o"
                 if self.relation_pos.lower() == "end":
                     fields[1], fields[2] = fields[2], fields[1]
-
-                triplets.append((self.entity2idx[fields[0]], self.relation2idx[fields[1]], self.entity2idx[fields[2]]))
-            
-                # Add (o, r^-1, s)
-                if self.inverse:
-                    triplets.append((self.entity2idx[fields[2]], self.relation2idx[fields[1]] + self.num_relations, self.entity2idx[fields[0]]))
-
                 
+                s = self.entity2idx[fields[0]]
+                r = self.relation2idx[fields[1]]
+                o = self.entity2idx[fields[2]]
+
+                # This only matters when we are pruning the dataset
+                # In that case we are only using a portion of either the relations or entities
+                if s in ent_set and o in ent_set and r in rel_set:
+                    triplets.append((s, r, o))
+                    
+                    if self.inverse:
+                        triplets.append((o, r + self.num_relations, s))
+
+
         return triplets
 
 
@@ -236,6 +260,7 @@ class AllDataSet():
 
         np.random.shuffle(non_inv_edges)
 
+        # Add 'num_keep_edges' True edges
         for sub, rel, obj in non_inv_edges[:num_keep_edges]:
             edge_index.append((sub, obj))
             edge_type.append(rel)
@@ -244,28 +269,12 @@ class AllDataSet():
                 edge_index.append((obj, sub))
                 edge_type.append(rel + num_rels)
 
-        triplets_set = set(self.all_triplets)
-        
-        # Add original edges
-        # for sub, rel, obj in self.triplets['train']:
-        #     edge_index.append((sub, obj))
-        #     edge_type.append(rel)
 
-        # Add random edges
+        # Add 'num_keep_edges' random edges
         while new_edges < num_rand_edges and num_rand_edges != 0:
-            # Ensure new edge doesn't exist in the *entire* dataset nor repeats among randoms
-            # if (s, r, o) not in triplets_set:
-            # triplets_set.add((s, r, o))
-            # edge_index.append((s, o))
-            # edge_type.append(r)
-
             self._generate_rand_edge(edge_index, edge_type)
             new_edges += 1
         
-        # for a, b in zip(edge_index, edge_type):
-        #     # print((a[0], b, a[1]))
-        #     if (a[0], b, a[1]) in triplets_set:
-        #         print("Queso!")
 
         edge_index	= torch.LongTensor(edge_index).to(device)
         edge_type = torch.LongTensor(edge_type).to(device)
@@ -280,7 +289,7 @@ class AllDataSet():
         """
         num_rels = int(self.num_relations / 2) if self.inverse else self.num_relations
 
-        r  = np.random.randint(num_rels)
+        r = np.random.randint(num_rels)
         s = np.random.randint(self.num_entities)
         o = np.random.randint(self.num_entities)
 
@@ -291,6 +300,53 @@ class AllDataSet():
             edge_index.append((o, s))
             edge_type.append(r + num_rels)
         
+
+    def prune_dataset(self):
+        """
+        Prune either the entities or relations in the dataset
+
+        self.entities, self.relations
+        self.num_entities, self.num_relations
+        self.triplets
+        """
+        if self.perc_ents != 1 and self.perc_rels != 1:
+            raise ValueError("Both perc_ents and perc_rels can't both < 1. Only one.")
+        
+        # if self.perc_ents != 1:
+        #     ents_to_sample = int(self.num_entities * perc_ents)
+
+        #     self.entities = random.sample(range(0, self.num_entities), ents_to_sample)
+        #     self.num_entities = len(self.entities)
+
+        # if perc_rels != 1:
+        #     # This will ensure we only sample from original relations
+        #     if self.inverse:
+        #         num_rels = list(set(self.relation2idx))
+
+        #     rels_to_sample = int(num_rels * perc_rels)
+        #     self.relations = random.sample(range(0, self.num_relations), rels_to_sample)
+
+        #     # We can add back in inverse rels
+        #     if self.inverse:
+        #         self.relations = self.relations + [i + num_rels for i in self.relations]
+
+        #     self.num_relations = len(self.relations)
+        
+        # Cull samples from self.triples
+
+        if self.perc_ents != 1:
+            num_ents = len(self.entities)
+            ents_to_sample = int(num_ents * self.perc_ents)
+
+            self.entities = random.sample(range(0, num_ents), ents_to_sample)
+            self.num_entities = len(self.entities)
+
+        if self.perc_rels != 1:
+            num_rels = len(self.relations)
+            rels_to_sample = int(num_rels * self.perc_rels)
+
+            self.relations = random.sample(range(0, num_rels), rels_to_sample)
+            self.num_relations = len(self.relations)
 
 
 
