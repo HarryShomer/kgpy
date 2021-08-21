@@ -8,8 +8,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
-# from torch_geometric.nn import MessagePassing
-from .torch_message_passing import MessagePassing
+from torch_geometric.nn import MessagePassing
 from .base_gnn_model import BaseGNNModel
 from kgpy import utils
 

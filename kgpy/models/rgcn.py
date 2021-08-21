@@ -10,8 +10,7 @@ from torch_scatter import scatter
 from torch_sparse import SparseTensor, matmul, masked_select_nnz
 
 from .base_gnn_model import BaseGNNModel
-# from torch_geometric.nn import MessagePassing
-from .torch_message_passing import MessagePassing
+from torch_geometric.nn import MessagePassing
 
 
 
@@ -23,11 +22,16 @@ def masked_edge_index(edge_index, edge_mask):
 		return masked_select_nnz(edge_index, edge_mask, layout='coo')
 
 
+def get_param(shape, device):
+	param = torch.nn.Parameter(torch.Tensor(*shape).to(device))
+	torch.nn.init.xavier_normal_(param.data)
+	return param
+
 
 
 class RGCN(BaseGNNModel):
-	def __init__(self, 
-			
+	def __init__(
+			self, 
 			num_entities, 
 			num_relations, 
 			edge_index, 
@@ -314,21 +318,15 @@ class RGCNConv(MessagePassing):
 	def message(self, x_j, edge_type, edge_index, norm):
 		if self.low_mem:
 			return x_j
-		
 		else:
-
-			if  self.num_bases is not None:
+			if self.num_bases is not None:
 				weight = self.weight
-		
-				weight = (self.comp @ weight.view(self.num_bases, -1)).view(
-					self.num_relations, self.in_channels_l, self.out_channels)
+				weight = (self.comp @ weight.view(self.num_bases, -1)).view(self.num_relations, self.in_channels_l, self.out_channels)
 
 				out = torch.bmm(x_j.unsqueeze(-2), weight[edge_type]).squeeze(-2)
 
 				return out if norm is None else out * norm.view(-1, 1)
 				
-				
-
 			elif self.num_blocks is not None:
 				weight = self.weight
 				
@@ -352,7 +350,3 @@ class RGCNConv(MessagePassing):
 		return norm
 		# return scatter(inputs, index, dim=self.node_dim, dim_size=dim_size)	
 
-def get_param(shape, device):
-	param = torch.nn.Parameter(torch.Tensor(*shape).to(device))
-	torch.nn.init.xavier_normal_(param.data)
-	return param

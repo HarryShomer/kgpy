@@ -39,8 +39,8 @@ parser.add_argument("--log-training-loss", help="Log training loss every n steps
 parser.add_argument("--save-every", help="Save model every n epochs", default=25, type=int)
 parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metrics", type=str, default="filtered")
 
-parser.add_argument('--rgcn_num_bases',	dest='rgcn_num_bases', 	default=None,   	type=int, 	help='Number of basis relation vectors to use in rgcn')
-parser.add_argument('--rgcn_num_blocks',	dest='rgcn_num_blocks', 	default=100,   	type=int, 	help='Number of block relation vectors to use in rgcn')
+parser.add_argument('--rgcn-num-bases',	 dest='rgcn_num_bases',  default=None,   type=int, 	help='Number of basis relation vectors to use in rgcn')
+parser.add_argument('--rgcn-num-blocks', dest='rgcn_num_blocks', default=None,   type=int, 	help='Number of block relation vectors to use in rgcn')
 
 
 args = parser.parse_args()
@@ -188,7 +188,6 @@ def get_model(data):
         model = models.RGCN(data.num_entities, data.num_relations, edge_index, edge_type, rgcn_num_bases=args.rgcn_num_bases, rgcn_num_blocks=args.rgcn_num_blocks, device=args.device)
     
     elif model_name == "compgcn":
-
         edge_index, edge_type = data.get_edge_tensors(device=args.device)
         model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=args.device)
     else:
