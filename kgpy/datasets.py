@@ -230,7 +230,7 @@ class AllDataSet():
         else:
             num_rels = self.num_relations
             non_inv_edges = self.triplets['train']
-
+        # print(len(non_inv_edges), rand_edge_perc)
         num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
         num_keep_edges = int(len(non_inv_edges) * (1 - rand_edge_perc))
 

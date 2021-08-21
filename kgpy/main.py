@@ -9,8 +9,8 @@ from kgpy.training import Trainer
 
 
 parser = argparse.ArgumentParser(description='KG model and params to run')
-parser.add_argument("model", help="Model to run")
-parser.add_argument("dataset", help="Dataset to run it on")
+parser.add_argument("--model", help="Model to run")
+parser.add_argument("--dataset", help="Dataset to run it on")
 parser.add_argument("--optimizer", help='Optimizer to use when training', type=str, default="Adam")
 parser.add_argument("--epochs", help="Number of epochs to run", default=250, type=int)
 parser.add_argument("--batch-size", help="Batch size to use for training", default=128, type=int)
@@ -38,6 +38,9 @@ parser.add_argument("--tensorboard", help="Whether to log to tensorboard", actio
 parser.add_argument("--log-training-loss", help="Log training loss every n steps", default=25, type=int)
 parser.add_argument("--save-every", help="Save model every n epochs", default=25, type=int)
 parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metrics", type=str, default="filtered")
+
+parser.add_argument('--rgcn_num_bases',	dest='rgcn_num_bases', 	default=None,   	type=int, 	help='Number of basis relation vectors to use in rgcn')
+parser.add_argument('--rgcn_num_blocks',	dest='rgcn_num_blocks', 	default=100,   	type=int, 	help='Number of block relation vectors to use in rgcn')
 
 
 args = parser.parse_args()
@@ -176,11 +179,17 @@ def get_model(data):
         model = models.ComplEx(data.num_entities, data.num_relations, **model_params)
     elif model_name == "rotate":
         model = models.RotatE(data.num_entities, data.num_relations, **model_params)
+
     elif model_name == "conve":
         model = models.ConvE(data.num_entities, data.num_relations, **model_params)
+    
+    elif model_name == "rgcn":
+        edge_index, edge_type = data.get_edge_tensors(device=args.device)
+        model = models.RGCN(data.num_entities, data.num_relations, edge_index, edge_type, rgcn_num_bases=args.rgcn_num_bases, rgcn_num_blocks=args.rgcn_num_blocks, device=args.device)
+    
     elif model_name == "compgcn":
 
-        edge_index, edge_type = data.get_edge_tensors(args.device)
+        edge_index, edge_type = data.get_edge_tensors(device=args.device)
         model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=args.device)
     else:
         raise ValueError(f"Model `{model_name}` is not available. See kgpy/models for possible models.")
