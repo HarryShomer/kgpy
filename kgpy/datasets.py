@@ -13,7 +13,6 @@ class TestDataset(torch.utils.data.Dataset):
     """
     Dataset object for test data
     """
-
     def __init__(self, triplets, all_triplets, num_entities, inverse=True, device='cpu'):
         self.device = device
         self.inverse = inverse
@@ -28,11 +27,11 @@ class TestDataset(torch.utils.data.Dataset):
         Length of dataset
         """
         return len(self.triplets)
-
+    
 
     def _build_index(self, triplets):
         """
-
+        Mapping of triplets for testing
         """
         self.index = defaultdict(list)
 
@@ -150,6 +149,7 @@ class AllDataSet():
             return self.triplets['valid']
         if key == "test":
             return self.triplets['test']
+            
         print("No key with name", key)
 
         return None
@@ -231,7 +231,11 @@ class AllDataSet():
 
     def get_edge_tensors(self, rand_edge_perc=0, device='cuda'):
         """
-        Create the edge_index and edge_type from the training data  
+        Create the edge_index and edge_type from the training data 
+
+        Create random edges by:
+            - generate non inv edge
+            - Create inv to go along with it (if needed) 
 
         Parameters:
         ----------
@@ -242,7 +246,7 @@ class AllDataSet():
 
         Returns:
         --------
-        tuple
+        tuple of torch.Tensor
             edge_index, edge_type    
         """
         new_edges = 0
@@ -254,30 +258,21 @@ class AllDataSet():
         else:
             num_rels = self.num_relations
             non_inv_edges = self.triplets['train']
-        # print(len(non_inv_edges), rand_edge_perc)
+
         num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
-        num_keep_edges = int(len(non_inv_edges) * (1 - rand_edge_perc))
 
-        np.random.shuffle(non_inv_edges)
-
-        # Add 'num_keep_edges' True edges
-        for sub, rel, obj in non_inv_edges[:num_keep_edges]:
+        for sub, rel, obj in self.triplets['train']:
             edge_index.append((sub, obj))
             edge_type.append(rel)
-
-            if self.inverse:
-                edge_index.append((obj, sub))
-                edge_type.append(rel + num_rels)
-
-
+      
         # Add 'num_keep_edges' random edges
         while new_edges < num_rand_edges and num_rand_edges != 0:
             self._generate_rand_edge(edge_index, edge_type)
-            new_edges += 1
-        
+            new_edges += 1  
 
         edge_index	= torch.LongTensor(edge_index).to(device)
         edge_type = torch.LongTensor(edge_type).to(device)
+
 
         return edge_index.transpose(0, 1), edge_type
 
@@ -285,7 +280,18 @@ class AllDataSet():
 
     def _generate_rand_edge(self, edge_index, edge_type):
         """
-        Modify in place!
+        Generate a single random edge. Modifies params in place!
+
+        Parameters:
+        -----------
+            edge_index: torch.Tensor
+                2xN tensor holding head and tail nodes
+            edge_type: torch.Tensor
+                1xN tensor holding relation type
+
+        Returns:
+        --------
+        None
         """
         num_rels = int(self.num_relations / 2) if self.inverse else self.num_relations
 
@@ -303,36 +309,18 @@ class AllDataSet():
 
     def prune_dataset(self):
         """
-        Prune either the entities or relations in the dataset
+        Prune either the entities or relations in the dataset.
 
-        self.entities, self.relations
-        self.num_entities, self.num_relations
-        self.triplets
+        Modifies instance param in-place!
+            - self.entities, self.relations
+            - self.num_entities, self.num_relations
+        
+        Returns:
+        --------
+        None
         """
         if self.perc_ents != 1 and self.perc_rels != 1:
             raise ValueError("Both perc_ents and perc_rels can't both < 1. Only one.")
-        
-        # if self.perc_ents != 1:
-        #     ents_to_sample = int(self.num_entities * perc_ents)
-
-        #     self.entities = random.sample(range(0, self.num_entities), ents_to_sample)
-        #     self.num_entities = len(self.entities)
-
-        # if perc_rels != 1:
-        #     # This will ensure we only sample from original relations
-        #     if self.inverse:
-        #         num_rels = list(set(self.relation2idx))
-
-        #     rels_to_sample = int(num_rels * perc_rels)
-        #     self.relations = random.sample(range(0, self.num_relations), rels_to_sample)
-
-        #     # We can add back in inverse rels
-        #     if self.inverse:
-        #         self.relations = self.relations + [i + num_rels for i in self.relations]
-
-        #     self.num_relations = len(self.relations)
-        
-        # Cull samples from self.triples
 
         if self.perc_ents != 1:
             num_ents = len(self.entities)
@@ -389,3 +377,11 @@ class WN18(AllDataSet):
     """
     def __init__(self, **kwargs):
         super().__init__("WN18", relation_pos="end", **kwargs)
+
+
+class YAGO3_10(AllDataSet):
+    """
+    Load the YAGO3-10 dataset
+    """
+    def __init__(self, **kwargs):
+        super().__init__("YAGO3-10", **kwargs)

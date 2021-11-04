@@ -25,7 +25,8 @@ class Trainer:
         optimizer, 
         data, 
         checkpoint_dir, 
-        tensorboard=False
+        tensorboard=False,
+        model_name=None
     ):
         self.data = data 
         self.model = model
@@ -35,6 +36,7 @@ class Trainer:
         self.device = model.device
         self.checkpoint_dir = checkpoint_dir
         self.start_time = utils.get_time()
+        self._model_name = model_name
 
         if tensorboard:
             self.writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, model.name, data.dataset_name), flush_secs=3)
@@ -42,6 +44,12 @@ class Trainer:
 
     @property
     def model_name(self):
+        """
+        Either use use-supplied or default to this
+        """
+        if self._model_name:
+            return f"{self._model_name}_{self.start_time}"
+        
         return f"{self.model.name}_{self.start_time}"
 
 
@@ -57,7 +65,9 @@ class Trainer:
             log_every_n_steps=100,
             negative_samples=1,
             eval_method="filtered",
-            label_smooth=0
+            label_smooth=0,
+            rand_trip_perc=0,
+            sampler=None
         ):
         """
         Train, validate, and test the model
@@ -86,6 +96,10 @@ class Trainer:
                 How to evaluate data. Filtered vs raw. Defaults to filtered
             label_smooth: float
                 Label smoothing when training
+            rand_trip_perc: float
+                Percentage of random triples to add. E.g. 1.5 = num_train_trips * 1.5 
+            sampler: kgpy.Sampler
+                Sampler object. Use this if provided otherwise create based on `train_method` arg
 
         Returns:
         --------
@@ -93,8 +107,12 @@ class Trainer:
         """
         step = 1
         val_mrr = []
-        sampler = self._get_sampler(train_method, train_batch_size, negative_samples)
-        model_eval = Evaluation("valid", self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
+        model_eval = Evaluation(self.data['valid'], self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
+        
+        if isinstance(sampler, sampling.Sampler):
+            sampler = sampler
+        else:
+            sampler = self._get_sampler(train_method, train_batch_size, negative_samples, rand_trip_perc)
 
         for epoch in range(1, epochs+1):
             epoch_loss = torch.Tensor([0]).to(self.device)
@@ -288,7 +306,7 @@ class Trainer:
         --------
         None
         """
-        model_eval = Evaluation("test", self.data, self.data.inverse, eval_method=eval_method, bs=bs, device=self.device)
+        model_eval = Evaluation(self.data['test'], self.data, self.data.inverse, eval_method=eval_method, bs=bs, device=self.device)
         test_results = model_eval.evaluate(self.model)
         
         print("\nTest Results:", flush=True)
@@ -296,7 +314,7 @@ class Trainer:
 
 
 
-    def _get_sampler(self, train_method, bs, num_negative=None):
+    def _get_sampler(self, train_method, bs, num_negative=None, rand_trip_perc=0):
         """
         Retrieve a sampler object for the type of train method
         """
@@ -306,23 +324,25 @@ class Trainer:
             sampler = sampling.One_to_K(
                         self.data['train'], 
                         bs, 
-                        self.data.num_entities, 
+                        self.data.num_entities,
+                        self.data.num_relations, 
                         self.device,
                         num_negative=num_negative,
-                        inverse=self.data.inverse
+                        inverse=self.data.inverse,
+                        rand_trip_perc=rand_trip_perc
                     )
         elif train_method == "1-N":
             sampler = sampling.One_to_N(
                         self.data['train'], 
                         bs, 
                         self.data.num_entities, 
+                        self.data.num_relations,
                         self.device,
-                        inverse=self.data.inverse
+                        inverse=self.data.inverse,
+                        rand_trip_perc=rand_trip_perc
                     )
         else:
             raise ValueError(f"Invalid train method `{train_method}`")
         
         return sampler
-
-
 

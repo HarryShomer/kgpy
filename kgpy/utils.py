@@ -19,6 +19,10 @@ class DataParallel(torch.nn.DataParallel):
 
 
 
+def get_time():
+    return datetime.strftime(datetime.now(), "%Y-%m-%dT%H%M%S")
+
+
 def get_mem():
     """
     Print all params and memory usage
@@ -29,7 +33,7 @@ def get_mem():
     for obj in gc.get_objects():
         try:
             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                print(obj.shape, type(obj), sys.getsizeof(obj.storage()))
+                print(obj.__class__.__name__, obj.shape, type(obj), sys.getsizeof(obj.storage()), obj.device)
         except: pass
 
 
@@ -50,25 +54,28 @@ def save_model(model, optimizer, epoch, data, checkpoint_dir, model_name):
     torch.save({
         "model_state_dict": model_obj.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "latent_dim": model_obj.emb_dim,
+
+        # TODO: Remove 'latent_dim' and replace with two commented lines
+        "latent_dim": model_obj.ent_emb_dim,
+        # "ent_dim": model_obj.ent_emb_dim,
+        # "reldim": model_obj.rel_emb_dim,
+        
         "loss_fn": model_obj.loss_fn.__class__.__name__,
         "epoch": epoch,
         "inverse": data.inverse
-        # "regularization": model_obj.regularization,
-        # "reg_weight": model_obj.reg_weight,
         }, 
         os.path.join(checkpoint_dir, data.dataset_name, f"{model_name}.tar")
     )
 
 
-def load_model(model, optimizer, dataset_name, checkpoint_dir, epoch=None):
+def load_model(model, optimizer, dataset_name, checkpoint_dir, suffix=None):
     """
     Load the saved model
     """
-    if epoch is None:
+    if suffix is None:
         file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}.tar")
     else:
-        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}_epoch_{epoch}.tar")
+        file_path = os.path.join(checkpoint_dir, dataset_name, f"{model.name}_{suffix}.tar")
 
     if not os.path.isfile(file_path):
         print(f"The file {file_path} doesn't exist")
@@ -103,12 +110,15 @@ def randint_exclude(begin, end, exclude):
     """
     Randint but exclude a number
 
-    Args:
+    Parameters:
+    -----------
         begin: begin of range
         end: end of range (exclusive)
         exclude: number to exclude
 
     Returns:
+    --------
+    int
         randint not in exclude
     """
     while True:
@@ -118,5 +128,38 @@ def randint_exclude(begin, end, exclude):
             return x
 
 
-def get_time():
-    return datetime.strftime(datetime.now(), "%Y-%m-%dT%H%M%S")
+def generate_rand_edges(num_edges, num_ents, num_rels, inverse=False):
+    """
+    Generate `num_edges` random edge. 
+    
+    When inverse == True we first generate a non-inverse edge and then create the inverse edge.
+
+    Parameters:
+    -----------
+        num_edges: int
+            Number of edges to generate. When inverse == True we cut in half
+        num_ents: int
+            Number of entities in dataset
+        num_rels: int
+            Number of relation in dataset
+        inverse: bool
+            Whether there are inverse edges in dataset
+        
+    Returns:
+    --------
+    list
+        Random edges of shape (s, r, o)
+    """
+    rand_edges = []
+    num_edges = num_edges // 2 if inverse else num_edges
+    num_rels  = num_rels // 2 if inverse else num_rels
+
+    for _ in range(int(num_edges)):
+        new_edge = (randint(0, num_ents-1), randint(0, num_rels-1), randint(0, num_ents-1))
+        rand_edges.append(new_edge)
+
+        if inverse:
+            new_inv_edge = (new_edge[2], new_edge[1] + num_rels, new_edge[0])
+            rand_edges.append(new_inv_edge)
+    
+    return rand_edges

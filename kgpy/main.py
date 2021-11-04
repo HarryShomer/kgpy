@@ -1,6 +1,8 @@
 import os
 import torch
+import random
 import argparse
+import numpy as np
 
 from kgpy import utils
 from kgpy import models
@@ -14,7 +16,7 @@ parser.add_argument("--dataset", help="Dataset to run it on")
 parser.add_argument("--optimizer", help='Optimizer to use when training', type=str, default="Adam")
 parser.add_argument("--epochs", help="Number of epochs to run", default=250, type=int)
 parser.add_argument("--batch-size", help="Batch size to use for training", default=128, type=int)
-parser.add_argument("--test-batch-size", help="Batch size to use for testing and validation", default=64, type=int)
+parser.add_argument("--test-batch-size", help="Batch size to use for testing and validation", default=128, type=int)
 parser.add_argument("--lr", help="Learning rate to use while training", default=1e-4, type=float)
 parser.add_argument("--train-type", help="Type of training method to use", type=str, default="1-N")
 parser.add_argument("--inverse", help="Include inverse edges", action='store_true', default=False)
@@ -26,22 +28,26 @@ parser.add_argument("--lp-weights", help="LP regularization weights. Can give on
 parser.add_argument("--dim", help="Latent dimension of entities and relations", type=int, default=None)
 parser.add_argument("--loss", help="Loss function to use.", default="bce")
 parser.add_argument("--neg-samples", help="Number of negative samples to using 1-K training", default=1, type=int)
-parser.add_argument("--loss-margin", help="If ranking is loss a margin can be sepcified", default=None, type=int)
+parser.add_argument("--margin", help="If ranking is loss a margin can be sepcified", default=None, type=int)
 parser.add_argument("--transe-norm", help="Norm used for distance function on TransE", default=2, type=int)
 
 parser.add_argument("--device", help="Device to run on", type=str, default="cuda")
 parser.add_argument("--parallel", help="Whether to train on multiple GPUs in parallel", action='store_true', default=False)
 parser.add_argument("--validation", help="Test on validation set every n epochs", type=int, default=5)
-parser.add_argument("--early-stop", help="Number of validation scores to wait for an increase before stopping", default=5, type=int)
+parser.add_argument("--early-stop", help="Number of validation scores to wait for an increase before stopping", default=10, type=int)
 parser.add_argument("--checkpoint-dir", help="Directory to store model checkpoints", default=os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "checkpoints"))
 parser.add_argument("--tensorboard", help="Whether to log to tensorboard", action='store_true', default=False)
 parser.add_argument("--log-training-loss", help="Log training loss every n steps", default=25, type=int)
-parser.add_argument("--save-every", help="Save model every n epochs", default=25, type=int)
+parser.add_argument("--save-every", help="Save model every n epochs", default=50, type=int)
+parser.add_argument("--save-as", help="Model to sabe model as", default=None, type=str)
+parser.add_argument("--seed", help="Random Seed", default=None, type=int)
 parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metrics", type=str, default="filtered")
+
+parser.add_argument("--rand-edge-agg", help="Create percentage of random edges for aggregation", type=float, default=0)
+parser.add_argument("--rand-edge-loss", help="Create percentage of random edges for loss", type=float, default=0)
 
 parser.add_argument('--rgcn-num-bases',	 dest='rgcn_num_bases',  default=None,   type=int, 	help='Number of basis relation vectors to use in rgcn')
 parser.add_argument('--rgcn-num-blocks', dest='rgcn_num_blocks', default=None,   type=int, 	help='Number of block relation vectors to use in rgcn')
-
 
 args = parser.parse_args()
 
@@ -49,6 +55,11 @@ args = parser.parse_args()
 if args.loss.lower() == "ranking" and args.neg_samples > 1:
     raise NotImplementedError("TODO: Ranking loss with > 1 negative samples")
 
+if args.seed is not None:
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
 
 
 
@@ -78,10 +89,10 @@ def run_model(model, optimizer, data):
         "save_every": args.save_every,
         "eval_method": args.evaluation_method,
         "label_smooth": args.label_smooth,
-        # "decay": args.decay
+        "rand_trip_perc": args.rand_edge_loss,
     }
 
-    model_trainer = Trainer(model, optimizer, data, args.checkpoint_dir, tensorboard=args.tensorboard)
+    model_trainer = Trainer(model, optimizer, data, args.checkpoint_dir, tensorboard=args.tensorboard, model_name=args.save_as)
     model_trainer.fit(args.epochs, args.batch_size, args.train_type, **train_keywords)
 
 
@@ -113,8 +124,8 @@ def parse_model_args():
     if args.loss is not None:
         model_params['loss_fn'] = args.loss
        
-    if args.loss_margin is not None:
-        model_params['margin'] = args.loss_margin
+    if args.margin is not None:
+        model_params['margin'] = args.margin
     
     if args.model.lower() == "transe":
         model_params['norm'] = args.transe_norm
@@ -150,7 +161,6 @@ def get_optimizer(model):
     return optimizer 
 
 
-# TODO: Provide cleaner implementation that doesn't rely on a bunch of if statements
 def get_model(data):
     """
     Get the model specificed
@@ -179,16 +189,13 @@ def get_model(data):
         model = models.ComplEx(data.num_entities, data.num_relations, **model_params)
     elif model_name == "rotate":
         model = models.RotatE(data.num_entities, data.num_relations, **model_params)
-
     elif model_name == "conve":
         model = models.ConvE(data.num_entities, data.num_relations, **model_params)
-    
     elif model_name == "rgcn":
-        edge_index, edge_type = data.get_edge_tensors(device=args.device)
+        edge_index, edge_type = data.get_edge_tensors(device=args.device, rand_edge_perc=args.rand_edge_perc)
         model = models.RGCN(data.num_entities, data.num_relations, edge_index, edge_type, rgcn_num_bases=args.rgcn_num_bases, rgcn_num_blocks=args.rgcn_num_blocks, device=args.device)
-    
     elif model_name == "compgcn":
-        edge_index, edge_type = data.get_edge_tensors(device=args.device)
+        edge_index, edge_type = data.get_edge_tensors(device=args.device, rand_edge_perc=args.rand_edge_perc)
         model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=args.device)
     else:
         raise ValueError(f"Model `{model_name}` is not available. See kgpy/models for possible models.")

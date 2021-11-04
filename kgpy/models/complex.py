@@ -5,7 +5,7 @@ See paper for more details - http://proceedings.mlr.press/v48/trouillon16.pdf.
 """
 import torch
 
-from .base_emb_model import ComplexEmbeddingModel
+from .base.complex_emb_model import ComplexEmbeddingModel
 
 
 class ComplEx(ComplexEmbeddingModel):
@@ -27,6 +27,7 @@ class ComplEx(ComplexEmbeddingModel):
             num_entities, 
             num_relations,  
             emb_dim, 
+            emb_dim,  
             margin, 
             regularization,
             reg_weight,
@@ -54,12 +55,12 @@ class ComplEx(ComplexEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h_re = self.entity_emb_re(triplets[:, 0])
-        h_im = self.entity_emb_im(triplets[:, 0])
-        t_re = self.entity_emb_re(triplets[:, 2])
-        t_im = self.entity_emb_im(triplets[:, 2])
-        r_re = self.relation_emb_re(triplets[:, 1])
-        r_im = self.relation_emb_im(triplets[:, 1])
+        h_re = self.ent_emb_re(triplets[:, 0])
+        h_im = self.ent_emb_im(triplets[:, 0])
+        t_re = self.ent_emb_re(triplets[:, 2])
+        t_im = self.ent_emb_im(triplets[:, 2])
+        r_re = self.rel_emb_re(triplets[:, 1])
+        r_im = self.rel_emb_im(triplets[:, 1])
 
         return torch.sum(
                   (h_re * r_re * t_re) 
@@ -84,12 +85,12 @@ class ComplEx(ComplexEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h_re = self.entity_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
-        h_im = self.entity_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
-        t_re = self.entity_emb_re(triplets[:, 1])
-        t_im = self.entity_emb_im(triplets[:, 1])
-        r_re = self.relation_emb_re(triplets[:, 0])
-        r_im = self.relation_emb_im(triplets[:, 0])
+        h_re = self.ent_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
+        h_im = self.ent_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
+        t_re = self.ent_emb_re(triplets[:, 1])
+        t_im = self.ent_emb_im(triplets[:, 1])
+        r_re = self.rel_emb_re(triplets[:, 0])
+        r_im = self.rel_emb_im(triplets[:, 0])
 
         return torch.sum(
                   (h_re[None, :, :] * r_re[:, None, :] * t_re[:, None, :]) 
@@ -114,12 +115,12 @@ class ComplEx(ComplexEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        t_re = self.entity_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
-        t_im = self.entity_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
-        h_re = self.entity_emb_re(triplets[:, 1])
-        h_im = self.entity_emb_im(triplets[:, 1])
-        r_re = self.relation_emb_re(triplets[:, 0])
-        r_im = self.relation_emb_im(triplets[:, 0])
+        t_re = self.ent_emb_re(torch.arange(self.num_entities, device=self._cur_device()).long())
+        t_im = self.ent_emb_im(torch.arange(self.num_entities, device=self._cur_device()).long())
+        h_re = self.ent_emb_re(triplets[:, 1])
+        h_im = self.ent_emb_im(triplets[:, 1])
+        r_re = self.rel_emb_re(triplets[:, 0])
+        r_im = self.rel_emb_im(triplets[:, 0])
 
         return torch.sum(
                   (h_re[:, None, :] * r_re[:, None, :] * t_re[None, :, :]) 

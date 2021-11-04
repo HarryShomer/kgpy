@@ -7,23 +7,36 @@ from kgpy.datasets import TestDataset
 
 
 class Evaluation:
+    """
+    Class for predicting on a set of triplets and calculating the evaluation metrics
 
-    def __init__(self, split, all_data, inverse, eval_method='filtered', bs=128, device='cpu'):
+    Parameters:
+    -----------
+        triplets: list
+            Triplets used for eval
+        all_data: AllDataset
+            AllDataset object
+        inverse: bool
+            Whether inverse edges
+        eval_method: str
+            filtered or raw
+        bs: int
+            Batch size
+        device: str
+            cpu or gpu
+    """
+    def __init__(self, triplets, all_data, inverse, eval_method='filtered', bs=128, device='cpu'):
         self.bs = bs
-        self.split = split
         self.data = all_data
         self.device = device
         self.inverse = inverse
+        self.triplets = triplets
         self.eval_method = eval_method
         self.hits_k_vals = [1, 3, 10]
 
         if self.eval_method != "filtered":
             raise NotImplementedError("TODO: Implement raw evaluation metrics")
-
-
-    @property
-    def triplets(self):
-        return self.data[self.split]
+        
 
 
     def print_results(self, results):
@@ -87,7 +100,7 @@ class Evaluation:
                     self.calc_metrics(tail_preds, obj, tail_lbls, results)
                 else:
                     preds = model(tail_trips, mode="tail")
-                    self.calc_metrics(preds, obj, tail_lbls, results)
+                    ranks = self.calc_metrics(preds, obj, tail_lbls, results)
 
         ### Average out results
         # TODO: Is this correct for 1-K?
@@ -105,7 +118,7 @@ class Evaluation:
         """
         Calculate the metrics for a number of samples.
 
-        `results` dict is modified inplace
+        NOTE: `results` dict is modified inplace
 
         Parameters:
         -----------
@@ -129,7 +142,7 @@ class Evaluation:
         target_pred	= preds[b_range, ent]
 
         # self.byte() is equivalent to self.to(torch.uint8)
-        # This makes true triplets not in the batch equal to -1000000 by first setting **all** true triplets to -1000000
+        # This makes true triplets not in the batch are equal to -1000000 by first setting **all** true triplets to -1000000
         # and then pluggin the original preds for the batch samples back in
         preds = torch.where(lbls.byte(), -torch.ones_like(preds) * 10000000, preds)
         preds[b_range, ent] = target_pred

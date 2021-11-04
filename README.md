@@ -10,6 +10,7 @@ Models implemented so far:
 4. RotatE
 5. ConvE
 6. CompGCN
+7. RGCN
 
 Possible datasets to run on:
 

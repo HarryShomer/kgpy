@@ -6,7 +6,7 @@ See paper for more details - https://arxiv.org/abs/1707.01476.
 import torch
 import torch.nn.functional as F
 
-from .base_emb_model import SingleEmbeddingModel
+from .base.single_emb_model import SingleEmbeddingModel
 
 
 class ConvE(SingleEmbeddingModel):
@@ -17,7 +17,9 @@ class ConvE(SingleEmbeddingModel):
         filters=32,
         ker_sz=3,
         k_h=20,
-        hidden_drop=.3,
+        # Code itself is hidden_drop=.3 but he mentions a higher regularization rate for FB15K-237 here
+        # https://github.com/TimDettmers/ConvE/issues/52#issuecomment-537231786
+        hidden_drop=.5,
         input_drop=.2,
         feat_drop=.2,
         margin=1, 
@@ -25,13 +27,14 @@ class ConvE(SingleEmbeddingModel):
         reg_weight=0,
         weight_init=None,
         loss_fn="bce",
-        device='cpu'
+        device='cuda'
     ):
         super().__init__(
             type(self).__name__,
             num_entities, 
             num_relations, 
             emb_dim, 
+            emb_dim,  
             margin, 
             regularization,
             reg_weight,
@@ -39,8 +42,7 @@ class ConvE(SingleEmbeddingModel):
             loss_fn,
             True,
             device
-        )
-        
+        )        
         self.inp_drop = torch.nn.Dropout(input_drop)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.feature_map_drop = torch.nn.Dropout2d(feat_drop)
@@ -118,11 +120,11 @@ class ConvE(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        e1_embedded  = self.entity_embeddings(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
-        rel_embedded = self.relation_embeddings(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
+        e1_embedded  = self.ent_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
+        rel_embedded = self.rel_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
 
         # Each must only be multiplied by entity belong to *own* triplet!!!
-        e2_embedded  = self.entity_embeddings(triplets[:, 2])
+        e2_embedded  = self.ent_embs(triplets[:, 2])
 
         x = self.score_function(e1_embedded, rel_embedded)
 
@@ -151,12 +153,11 @@ class ConvE(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        e1_embedded  = self.entity_embeddings(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
-        rel_embedded = self.relation_embeddings(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
+        e1_embedded  = self.ent_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
+        rel_embedded = self.rel_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
 
         x = self.score_function(e1_embedded, rel_embedded)
-
-        x = torch.mm(x, self.entity_embeddings.weight.transpose(1,0))
+        x = torch.mm(x, self.ent_embs.weight.transpose(1,0))
         x += self.b.expand_as(x)
 
         return x

@@ -9,8 +9,38 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 from torch_geometric.nn import MessagePassing
-from .base_gnn_model import BaseGNNModel
-from kgpy import utils
+
+from .base.base_gnn_model import BaseGNNModel
+
+
+
+class mlp_layer(torch.nn.Module):
+
+    def __init__(self, in_channels, out_channels, device='cuda', bias=True):
+        super().__init__()
+
+        self.act = torch.tanh
+        self.use_bias = bias
+
+        self.W_entity	= get_param((in_channels, out_channels), device)
+        self.W_relation = get_param((in_channels, out_channels), device)
+        self.bn	= torch.nn.BatchNorm1d(out_channels)
+
+        if self.use_bias:
+            self.register_parameter('mlp_bias', nn.Parameter(torch.zeros(out_channels).to(device)))
+
+
+    def forward(self, x, r):
+        out =  torch.mm(x, self.W_entity)
+
+        if self.use_bias: 
+            out = out + self.mlp_bias
+        out = self.bn(out)
+
+        if self.act is not None:
+            out = self.act(out)
+
+        return out, torch.matmul(r, self.W_relation)	
 
 
 
@@ -36,6 +66,8 @@ class CompGCN(BaseGNNModel):
         layer1_drop=.3,
         layer2_drop=.3,
         gcn_drop=.1,
+
+        mlp=False,
 
         # Only applicable when decoder = 'transe'
         margin=9,   
@@ -68,17 +100,19 @@ class CompGCN(BaseGNNModel):
         self.gcn_drop = torch.nn.Dropout(gcn_drop)
         self.act = torch.tanh
 
-    
-        if num_bases > 0:
-            raise NotImplementedError("TODO: Basis convolution")
-            # self.relation_embeddings  = get_param((num_bases, self.emb_dim))
-        else:
-            # Idk...this is how they have it for the rel params
-            # self.relation_embeddings = get_param((num_relations, self.emb_dim), self.device) if self.decoder == 'transe' else get_param((num_relations*2, self.emb_dim), self.device)
-            self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer1_drop, device=self.device)
+        self.mlp_agg = mlp
 
-        if self.num_layers == 2:
-            self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer2_drop, device=self.device)
+        if self.mlp_agg:
+            self.mlp1 = mlp_layer(self.emb_dim, self.gcn_dim, device=device)
+            self.mlp2 = mlp_layer(self.gcn_dim, self.emb_dim, device=device)
+        else:
+            if num_bases > 0:
+                raise NotImplementedError("TODO: Basis convolution")
+            else:
+                self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer1_drop, device=self.device)
+
+            if self.num_layers == 2:
+                self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer2_drop, device=self.device)
 
         self.register_parameter('bias', nn.Parameter(torch.zeros(self.num_entities).to(self.device)))
 
@@ -118,15 +152,23 @@ class CompGCN(BaseGNNModel):
         """
         # Note: Idk. This is how they have it implemented
         if self.decoder != 'transe':
-            r = self.relation_embeddings 
+            r = self.rel_embs 
         else:
-            r = torch.cat([self.relation_embeddings, -self.relation_embeddings], dim=0)
+            r = torch.cat([self.rel_embs, -self.rel_embs], dim=0)
 		
-        x, r = self.conv1(self.entity_embeddings, self.edge_index, self.edge_type, rel_embed=r)
+        if self.mlp_agg:
+            x, r = self.mlp1(self.ent_embs, r)
+        else:
+            x, r = self.conv1(self.ent_embs, self.edge_index, self.edge_type, rel_embed=r)
+
         x = self.gcn_drop(x)
     
         if self.num_layers > 1:
-            x, r = self.conv2(x, self.edge_index, self.edge_type, rel_embed=r)
+            if self.mlp_agg:
+                x, r = self.mlp2(x, r)
+            else:
+                x, r = self.conv2(x, self.edge_index, self.edge_type, rel_embed=r)
+
             x = self.gcn_drop(x) 	
         
         return self.get_preds(triplets, x, r)

@@ -4,9 +4,12 @@ Sampling strategies for training
 import copy
 import torch
 import random
+from random import randint
 import numpy as np 
 from collections import defaultdict
 from abc import ABC, abstractmethod
+
+from torch._C import AggregationType
 
 from kgpy import utils
 
@@ -15,12 +18,14 @@ class Sampler(ABC):
     """
     Abstract base class for implementing samplers
     """
-    def __init__(self, triplets, batch_size, num_ents, device, inverse):
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc=0):
         self.bs = batch_size
         self.triplets = triplets
         self.num_ents = num_ents
+        self.num_rels = num_rels
         self.inverse = inverse
         self.device = device
+        self.rand_trip_perc = rand_trip_perc
 
         self._build_index()
         self.keys = list(self.index.keys())
@@ -59,7 +64,46 @@ class Sampler(ABC):
         """
         pass
 
-    
+
+    def _rand_new_trip(self, all_triples):
+        """
+        Generate a new triplet not in the index so far
+        """
+        num_rels = self.num_rels // 2 if self.inverse else self.num_rels
+
+        while True:
+            rand_sub = randint(0, self.num_ents-1)
+            rand_rel = randint(0, num_rels-1)
+            rand_obj = randint(0, self.num_ents-1)
+
+            # Get existing objects for (h, r) pair. If empty then (h, r) doesn't exist
+            # for non-inverse no need to check head as if one exists so does the other
+            # exist_tuple = (rand_rel, rand_sub) if self.inverse else ("tail", rand_rel, rand_sub)
+
+            # Done like this since directly querying defaultdict create key
+            # existing_objs = self.index[exist_tuple] if exist_tuple in self.index else []
+ 
+            # NOTE: Old method for just completely random noise
+            if (rand_sub, rand_rel, rand_obj) not in all_triples:
+
+            # (h, r) exists and t no one of possible objects
+            # if len(existing_objs) > 0 and rand_obj not in existing_objs:
+                all_triples.add((rand_sub, rand_rel, rand_obj))
+
+                if self.inverse:
+                    self.index[(rand_rel, rand_sub)].append(rand_obj)
+                    self.index[(rand_rel + num_rels, rand_obj)].append(rand_sub)                
+                    # No need to add inv to all_triples since we always generate non-inv first
+                else:
+                    self.index[("head", rand_rel, rand_obj)].append(rand_sub)
+                    self.index[("tail", rand_rel, rand_sub)].append(rand_obj) 
+
+                    # Hack since for 1-K it uses self.triplets to determine number of batches
+                    self.triplets.append((rand_sub, rand_rel, rand_obj))
+
+                break
+ 
+
     def _build_index(self):
         """
         Create self.index mapping.
@@ -79,19 +123,34 @@ class Sampler(ABC):
         None
         """
         self.index = defaultdict(list)
+        all_triples = set(self.triplets)
 
-        for t in self.triplets:
-            if self.inverse:
-                self.index[(t[1], t[0])].append(t[2])
-            else:
-                self.index[("head", t[1], t[2])].append(t[0])
-                self.index[("tail", t[1], t[0])].append(t[2])
+        # Divide by 2 bec. no need to create again for inverse...
+        new_edges = int(len(self.triplets) * np.abs(self.rand_trip_perc))
+        new_edges = new_edges // 2 if self.inverse else new_edges
+
+        # -1 means replace all
+        if self.rand_trip_perc != -1:
+            for t in self.triplets:
+                if self.inverse:
+                    self.index[(t[1], t[0])].append(t[2])
+                else:
+                    self.index[("head", t[1], t[2])].append(t[0])
+                    self.index[("tail", t[1], t[0])].append(t[2])
+        else:
+            self.triplets = []
+            all_triples = set()   # not needed since we don't care about real train samples
+        
+        # Only matters when self.rand_trip_perc > 0
+        for _ in range(new_edges):
+            self._rand_new_trip(all_triples)
 
         # Remove duplicates
         for k, v in self.index.items():
             self.index[k] = list(set(v))
+        
 
-
+            
     def _get_labels(self, samples):
         """
         Get the label arrays for the corresponding batch of samples
@@ -114,6 +173,7 @@ class Sampler(ABC):
             y[i, lbls] = 1
 
         return y
+    
 
 
 
@@ -141,8 +201,8 @@ class One_to_K(Sampler):
         num_negative: int
             Number of corrupted samples to produce per training procedure
     """
-    def __init__(self, triplets, batch_size, num_ents, device, num_negative=1, inverse=False):
-        super(One_to_K, self).__init__(triplets, batch_size, num_ents, device, inverse)
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, num_negative=1, inverse=False, rand_trip_perc=0):
+        super(One_to_K, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc)
 
         self.num_negative = num_negative        
         self._shuffle()
@@ -240,9 +300,10 @@ class One_to_N(Sampler):
         num_ents: int
             Total number of entities in dataset
     """
-    def __init__(self, triplets, batch_size, num_ents, device, inverse=False):
-        super(One_to_N, self).__init__(triplets, batch_size, num_ents, device, inverse)
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse=False, rand_trip_perc=0):
+        super(One_to_N, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc)
         self._shuffle()
+        self.rand_trip_perc = rand_trip_perc
 
 
     def __len__(self):
@@ -277,13 +338,12 @@ class One_to_N(Sampler):
 
         # Collect next self.bs samples
         batch_samples = self.keys[self.trip_iter: min(self.trip_iter + self.bs, len(self.keys))]
-        batch_samples = np.array([list(x) for x in batch_samples])
-
+        batch_samples = np.array(batch_samples)
+        
         self._increment_iter()
 
         if self.inverse:
-            # batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
-            batch_ix  = torch.Tensor(batch_samples).to(self.device).long()
+            batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
             batch_lbls = self._get_labels(batch_samples)
 
             return batch_ix, batch_lbls 

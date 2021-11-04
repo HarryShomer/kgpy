@@ -9,6 +9,7 @@ build/
 .pytest_cache
 *.sbatch
 run_compgcn.py
+run_checkpoint.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -5,7 +5,7 @@ See paper for more details - https://arxiv.org/pdf/1412.6575.pdf.
 """
 import torch
 
-from .base_emb_model import SingleEmbeddingModel
+from .base.single_emb_model import SingleEmbeddingModel
 
 
 class DistMult(SingleEmbeddingModel):
@@ -25,6 +25,7 @@ class DistMult(SingleEmbeddingModel):
             type(self).__name__,
             num_entities, 
             num_relations, 
+            emb_dim, 
             emb_dim, 
             margin, 
             regularization,
@@ -50,9 +51,9 @@ class DistMult(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h = self.entity_embeddings(triplets[:, 0])
-        r = self.relation_embeddings(triplets[:, 1])
-        t = self.entity_embeddings(triplets[:, 2])
+        h = self.ent_embs(triplets[:, 0])
+        r = self.rel_embs(triplets[:, 1])
+        t = self.ent_embs(triplets[:, 2])
 
         return torch.sum(h * r * t, dim=-1)
 
@@ -71,9 +72,9 @@ class DistMult(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h = self.entity_embeddings(torch.arange(self.num_entities, device=self._cur_device()).long())
-        r = self.relation_embeddings(triplets[:, 0])
-        t = self.entity_embeddings(triplets[:, 1])
+        h = self.ent_embs(torch.arange(self.num_entities, device=self._cur_device()).long())
+        r = self.rel_embs(triplets[:, 0])
+        t = self.ent_embs(triplets[:, 1])
 
         return torch.sum(h[None, :, :] * r[:, None, :] * t[:, None, :], dim=-1)
 
@@ -92,8 +93,8 @@ class DistMult(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        h = self.entity_embeddings(triplets[:, 1])
-        r = self.relation_embeddings(triplets[:, 0])
-        t = self.entity_embeddings(torch.arange(self.num_entities, device=self._cur_device()).long())
+        h = self.ent_embs(triplets[:, 1])
+        r = self.rel_embs(triplets[:, 0])
+        t = self.ent_embs(torch.arange(self.num_entities, device=self._cur_device()).long())
 
         return torch.sum(h[:, None, :] * r[:, None, :] * t[None, :, :], dim=-1)
