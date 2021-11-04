@@ -7,5 +7,5 @@ from .dist_mult import DistMult
 from .complex import ComplEx
 from .rotate import RotatE
 from .conve import ConvE
-# from .comp_gcn import CompGCN
-# from .rgcn import RGCN
+from .comp_gcn import CompGCN
+from .rgcn import RGCN

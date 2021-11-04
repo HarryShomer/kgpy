@@ -10,6 +10,7 @@ build/
 *.sbatch
 run_compgcn.py
 run_checkpoint.py
+weight_norms.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
