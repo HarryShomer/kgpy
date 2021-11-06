@@ -12,7 +12,7 @@ setup(
     author='Harry Shomer',
     author_email='Harryshomer@gmail.com',
     packages=['kgpy'],
-    install_requires=['tqdm', 'torch', 'tensorboard'],
+    install_requires=['tqdm', 'tensorboard', 'torch', 'torch_geometric', 'torch_scatter'],
     include_package_data=True,
     zip_safe=False
 )

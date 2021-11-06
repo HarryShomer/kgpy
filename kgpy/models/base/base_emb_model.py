@@ -53,9 +53,6 @@ class EmbeddingModel(ABC, nn.Module):
         norm_constraint,   # TODO: Split by relation and entitiy? Also allow specfication of norm?
         device
     ):
-        """
-        Model constructor
-        """
         super(EmbeddingModel, self).__init__()
         
         self.name = model_name

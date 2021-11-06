@@ -16,6 +16,7 @@ Possible datasets to run on:
 
 1. WN18 and WN18RR
 2. FB15K and FB15K-237 
+3. YAGO3-10
 
 
 ### Usage

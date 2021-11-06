@@ -9,8 +9,6 @@ import numpy as np
 from collections import defaultdict
 from abc import ABC, abstractmethod
 
-from torch._C import AggregationType
-
 from kgpy import utils
 
 

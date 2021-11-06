@@ -133,10 +133,16 @@ class AllDataSet():
             self.num_relations *= 2
         
 
-
     @property
     def all_triplets(self):
         return list(set(self.triplets['train'] + self.triplets['valid'] + self.triplets['test']))
+
+    @property
+    def num_non_inv_rels(self):
+        if self.inverse:
+            return int(self.num_relations / 2)
+        else:
+            return self.num_relations
 
         
     def __getitem__(self, key):

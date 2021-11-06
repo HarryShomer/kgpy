@@ -17,7 +17,7 @@ class ConvE(SingleEmbeddingModel):
         filters=32,
         ker_sz=3,
         k_h=20,
-        # Code itself is hidden_drop=.3 but he mentions a higher regularization rate for FB15K-237 here
+        # Code itself is hidden_drop=.3 but he mentions a higher regularization rate (0.5) for FB15K-237 here
         # https://github.com/TimDettmers/ConvE/issues/52#issuecomment-537231786
         hidden_drop=.5,
         input_drop=.2,
@@ -135,7 +135,7 @@ class ConvE(SingleEmbeddingModel):
         # TODO: ???
         # x += self.b.expand_as(x)
 
-        # No need to pass through sigmoid since loss (bce_w_logits applies it)
+        # No need to pass through sigmoid since loss (bce_w_logits) applies it
         return x
 
 
