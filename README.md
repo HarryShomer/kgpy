@@ -66,7 +66,6 @@ NOTE: Running with the CLI is limited as not all options are available for each 
 1. Implement other KGEs
 2. Better documentation
 3. Provide cleaner implementation of BaseGNNModel
-4. Setup.py?
 
 
 ### Data
