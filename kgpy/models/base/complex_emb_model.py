@@ -137,16 +137,25 @@ class ComplexEmbeddingModel(EmbeddingModel):
         """
         Apply regularization if specified.
 
+                # unweighted Lp regularization
+                parameters = self._embeddings_all()
+                result += [
+                    (
+                        f"{self.configuration_key}.L{p}_penalty",
+                        (regularize_weight / p * parameters.norm(p=p) ** p).sum(),
+                    )
+                ]
+
         Returns:
         --------
         float
             Regularization term for loss
         """
-        if self.regularization is None:
+        if self.regularization is None or self.regularization == 0:
             return 0
 
         lp = int(self.regularization[1])
-        
+
         entity_re = self._norm(self.ent_emb_re, lp)
         entity_im = self._norm(self.ent_emb_im, lp)
         relation_re = self._norm(self.rel_emb_re, lp)
@@ -155,7 +164,9 @@ class ComplexEmbeddingModel(EmbeddingModel):
         if isinstance(self.reg_weight, Iterable):
             return self.reg_weight[0] * (entity_re**lp + entity_im**lp) + self.reg_weight[1] * (relation_re**lp + relation_im**lp)
         
-        return self.reg_weight * (entity_re**lp + entity_im**lp + relation_re**lp + relation_im**lp) 
+        return self.reg_weight / lp * (entity_re**lp + entity_im**lp + relation_re**lp + relation_im**lp) 
+
+
 
 
     def _cur_device(self):

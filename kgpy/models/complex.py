@@ -16,10 +16,10 @@ class ComplEx(ComplexEmbeddingModel):
         num_relations, 
         emb_dim=100, 
         margin=1, 
-        regularization = 'l2',
-        reg_weight = 1e-6,
+        regularization = 'l3',
+        reg_weight = 5e-2,
         weight_init="normal",
-        loss_fn= "ranking",  #"softplus",
+        loss_fn= "bce",
         device='cpu'
     ):
         super().__init__(

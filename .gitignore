@@ -8,9 +8,7 @@ notes.txt
 build/
 .pytest_cache
 *.sbatch
-run_compgcn.py
-run_checkpoint.py
-weight_norms.py
+scripts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

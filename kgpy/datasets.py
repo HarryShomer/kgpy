@@ -13,11 +13,12 @@ class TestDataset(torch.utils.data.Dataset):
     """
     Dataset object for test data
     """
-    def __init__(self, triplets, all_triplets, num_entities, inverse=True, device='cpu'):
+    def __init__(self, triplets, all_triplets, num_entities, inverse=True, only_sample=False, device='cpu'):
         self.device = device
         self.inverse = inverse
         self.triplets = triplets
         self.num_entities = num_entities
+        self.only_sample = only_sample
 
         self._build_index(all_triplets)
 
@@ -68,13 +69,16 @@ class TestDataset(torch.utils.data.Dataset):
         rel_sub = torch.LongTensor([triple[1].item(), triple[0].item()])
         rel_obj = torch.LongTensor([triple[1].item(), triple[2].item()])
 
-
         # Labels for all possible objects for triplet (s, r, ?)
         if self.inverse:
-            possible_obj = np.int32(self.index[(triple[1].item(), triple[0].item())])
+            # NOTE: self.only_sample is a hack to only assign the current triple as the true label!
+            # This should not be used when training! 
+            # This was only added to aid me in some analysis
+            possible_obj = [triple[2]] if self.only_sample else np.int32(self.index[(triple[1].item(), triple[0].item())])
+
             obj_label  = self.get_label(possible_obj)
 
-            return rel_sub, triple[2], obj_label
+            return rel_sub, triple[2], obj_label, triple
         
         # For both (s, r, ?) and (?, r, o)
         possible_obj  = np.int32(self.index[("tail", triple[1].item(), triple[0].item())])
@@ -82,7 +86,7 @@ class TestDataset(torch.utils.data.Dataset):
         obj_label  = self.get_label(possible_obj)
         sub_label  = self.get_label(possible_sub)
 
-        return rel_sub, triple[2], obj_label, rel_obj, triple[0], sub_label 
+        return rel_sub, triple[2], obj_label, rel_obj, triple[0], sub_label, triple 
 
 
         
@@ -155,10 +159,8 @@ class AllDataSet():
             return self.triplets['valid']
         if key == "test":
             return self.triplets['test']
-            
-        print("No key with name", key)
-
-        return None
+        
+        raise ValueError("No key with name", key)
 
 
     def _load_mapping(self):
@@ -259,10 +261,8 @@ class AllDataSet():
         edge_index, edge_type = [], []
 
         if self.inverse:
-            num_rels = int(self.num_relations / 2)
-            non_inv_edges = [e for e in self.triplets['train'] if e[1] < num_rels]
+            non_inv_edges = [e for e in self.triplets['train'] if e[1] < self.num_non_inv_rels]
         else:
-            num_rels = self.num_relations
             non_inv_edges = self.triplets['train']
 
         num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
@@ -343,6 +343,104 @@ class AllDataSet():
             self.num_relations = len(self.relations)
 
 
+    ###################################################################################
+    ###################################################################################
+    ###################################################################################
+
+
+    def add_rel_neighborhood_noise(self, rand_edge_perc=1, sample_rate=.25):
+        """
+        NOTE: As of right now just adds to self.triplets['train']
+        """
+        new_edges = 0
+        rel_adj = self._create_rel_adj()
+
+        if self.inverse:
+            non_inv_edges = [e for e in self.triplets['train'] if e[1] < self.num_non_inv_rels]
+        else:
+            non_inv_edges = self.triplets['train']
+
+        # Number of edges to create
+        num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
+
+        # Makes looking up duplicates O(1)
+        trip_dict = {t: 0 for t in self.all_triplets}
+
+        while new_edges < num_rand_edges and num_rand_edges != 0:
+            # print(f"{new_edges} / {num_rand_edges}")
+            new_edges += self._generate_rel_neighborhood(rel_adj, sample_rate, trip_dict)
+
+
+    def _generate_rel_neighborhood(self, r_adj, sample_rate, all_trips_dict):
+        """
+        Don't modify tensors!!! 
+        
+        Only modifies self.triplets['train'] inplace
+        
+        Returns:
+        --------
+        int
+            number of new edges created
+        """
+        num_new_trips = 0
+
+        # Entity's neighborhood we are simulating
+        e_sim = np.random.randint(self.num_entities)
+
+        # Entity we are slotting in
+        e_rand = np.random.randint(self.num_entities)
+
+        num_trips_to_create = int(len(r_adj[e_sim]) * sample_rate)
+        r_neigbors = random.sample(r_adj[e_sim], num_trips_to_create)
+
+        for r in r_neigbors:
+            # print(">>>", r)
+            num_rel_trips, iters = 0, 0
+
+            # Choose here whether it'll be a tail or head for 
+            head_or_tail = random.randint(0, 1)
+            
+            # TODO: Number of heads/tail to add...should define based on dataset
+            num_head_tails = random.randint(0, 100)
+
+            # Second condition controls for looping forever
+            while num_rel_trips < num_head_tails and iters < num_head_tails * 10:
+                e2 = np.random.randint(self.num_entities)
+                
+                # Only place as head bec
+                trip = (e_rand, r, e2) if head_or_tail == 0 else (e2, r, e_rand)
+
+                # Not same entity and 
+                if e2 != e_rand and trip not in all_trips_dict:
+                    self.triplets['train'].append(trip)
+                    num_rel_trips += 1
+                        
+                    if self.inverse:
+                        self.triplets['train'].append((trip[2], r + self.num_non_inv_rels, trip[0]))
+                        num_rel_trips += 1
+                else:
+                    iters += 1
+            
+            num_new_trips += num_rel_trips
+
+
+        return num_new_trips
+
+
+    def _create_rel_adj(self):
+        """
+        Neighboring relations for each entity
+
+        NOTE: Only non-inverse relations! We'll add the inverse for each 
+        """
+        r_adj = {e: set() for e in range(self.num_entities)}
+
+        for t in self.triplets['train']:
+            if t[1] < self.num_non_inv_rels:
+                r_adj[t[0]].add(t[1])
+                r_adj[t[2]].add(t[1])
+        
+        return r_adj
 
 
 

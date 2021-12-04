@@ -150,7 +150,7 @@ class CompGCN(BaseGNNModel):
         Tensor
             preds for batch
         """
-        # Note: Idk. This is how they have it implemented
+        # NOTE: Idk. This is how they have it implemented
         if self.decoder != 'transe':
             r = self.rel_embs 
         else:
@@ -487,8 +487,15 @@ def conj(a):
 	a[..., 1] = -a[..., 1]
 	return a
 
+# NOTE: Deprecated
+# def cconv(a, b):
+# 	return torch.fft.irfft(com_mult(torch.fft.rfft(a, 1), torch.fft.rfft(b, 1)), 1, signal_sizes=(a.shape[-1],))
+
+# def ccorr(a, b):
+# 	return torch.fft.irfft(com_mult(conj(torch.fft.rfft(a, 1)), torch.fft.rfft(b, 1)), 1, signal_sizes=(a.shape[-1],))
+
 def cconv(a, b):
-	return torch.irfft(com_mult(torch.rfft(a, 1), torch.rfft(b, 1)), 1, signal_sizes=(a.shape[-1],))
+	return torch.fft.irfft(torch.fft.rfft(a) * torch.fft.rfft(b, 1), n=a.shape[-1])
 
 def ccorr(a, b):
-	return torch.irfft(com_mult(conj(torch.rfft(a, 1)), torch.rfft(b, 1)), 1, signal_sizes=(a.shape[-1],))
+    return torch.fft.irfft(conj(torch.fft.rfft(a)) * torch.fft.rfft(b, 1), n=a.shape[-1])

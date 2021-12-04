@@ -235,6 +235,8 @@ class EmbeddingModel(ABC, nn.Module):
             scores = self.score_head(triplets)
         elif mode == "tail":
             scores = self.score_tail(triplets)
+        elif mode == "both":
+            scores = self.score_both(triplets)
         else:
             raise ValueError("Invalid value for `mode` passed to Model.forward(). Must be one of [None, 'head', 'tail']")
 
@@ -293,7 +295,8 @@ class EmbeddingModel(ABC, nn.Module):
         --------
             Embedding
         """
-        emb.weight.data = emb.weight.data / self._norm(emb, p, dim=1, keepdim=True)
+        emb.weight.data = torch.nn.functional.normalize(emb.weight.data, p=p, dim=-1)
+
         return emb
 
 

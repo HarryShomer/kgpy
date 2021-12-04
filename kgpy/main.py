@@ -20,7 +20,7 @@ parser.add_argument("--test-batch-size", help="Batch size to use for testing and
 parser.add_argument("--lr", help="Learning rate to use while training", default=1e-4, type=float)
 parser.add_argument("--train-type", help="Type of training method to use", type=str, default="1-N")
 parser.add_argument("--inverse", help="Include inverse edges", action='store_true', default=False)
-# parser.add_argument("--decay", help="Decay function for LR of form C^epoch", type=float, default=None)
+parser.add_argument("--decay", help="Decay function for LR of form C^epoch", type=float, default=None)
 
 parser.add_argument("--label-smooth", help="label smoothing", default=0, type=float)
 parser.add_argument("--lp", help="LP regularization penalty to add to loss", type=int, default=None)
@@ -39,12 +39,9 @@ parser.add_argument("--checkpoint-dir", help="Directory to store model checkpoin
 parser.add_argument("--tensorboard", help="Whether to log to tensorboard", action='store_true', default=False)
 parser.add_argument("--log-training-loss", help="Log training loss every n steps", default=25, type=int)
 parser.add_argument("--save-every", help="Save model every n epochs", default=50, type=int)
-parser.add_argument("--save-as", help="Model to sabe model as", default=None, type=str)
+parser.add_argument("--save-as", help="Model to save model as", default=None, type=str)
 parser.add_argument("--seed", help="Random Seed", default=None, type=int)
 parser.add_argument("--evaluation-method", help="Either 'raw' or 'filtered' metrics", type=str, default="filtered")
-
-parser.add_argument("--rand-edge-agg", help="Create percentage of random edges for aggregation", type=float, default=0)
-parser.add_argument("--rand-edge-loss", help="Create percentage of random edges for loss", type=float, default=0)
 
 parser.add_argument('--rgcn-num-bases',	 dest='rgcn_num_bases',  default=None,   type=int, 	help='Number of basis relation vectors to use in rgcn')
 parser.add_argument('--rgcn-num-blocks', dest='rgcn_num_blocks', default=None,   type=int, 	help='Number of block relation vectors to use in rgcn')
@@ -89,7 +86,7 @@ def run_model(model, optimizer, data):
         "save_every": args.save_every,
         "eval_method": args.evaluation_method,
         "label_smooth": args.label_smooth,
-        "rand_trip_perc": args.rand_edge_loss,
+        "decay": args.decay,
     }
 
     model_trainer = Trainer(model, optimizer, data, args.checkpoint_dir, tensorboard=args.tensorboard, model_name=args.save_as)
@@ -191,11 +188,13 @@ def get_model(data):
         model = models.RotatE(data.num_entities, data.num_relations, **model_params)
     elif model_name == "conve":
         model = models.ConvE(data.num_entities, data.num_relations, **model_params)
+    elif model_name == "tucker":
+        model = models.TuckER(data.num_entities, data.num_relations, **model_params)
     elif model_name == "rgcn":
-        edge_index, edge_type = data.get_edge_tensors(device=args.device, rand_edge_perc=args.rand_edge_perc)
+        edge_index, edge_type = data.get_edge_tensors(device=args.device)
         model = models.RGCN(data.num_entities, data.num_relations, edge_index, edge_type, rgcn_num_bases=args.rgcn_num_bases, rgcn_num_blocks=args.rgcn_num_blocks, device=args.device)
     elif model_name == "compgcn":
-        edge_index, edge_type = data.get_edge_tensors(device=args.device, rand_edge_perc=args.rand_edge_perc)
+        edge_index, edge_type = data.get_edge_tensors(device=args.device)
         model = models.CompGCN(data.num_entities, data.num_relations, edge_index, edge_type, device=args.device)
     else:
         raise ValueError(f"Model `{model_name}` is not available. See kgpy/models for possible models.")

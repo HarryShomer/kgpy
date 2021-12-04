@@ -26,7 +26,8 @@ class Trainer:
         data, 
         checkpoint_dir, 
         tensorboard=False,
-        model_name=None
+        model_name=None,
+        **kwargs
     ):
         self.data = data 
         self.model = model
@@ -67,7 +68,8 @@ class Trainer:
             eval_method="filtered",
             label_smooth=0,
             rand_trip_perc=0,
-            sampler=None
+            sampler=None,
+            decay=None,
         ):
         """
         Train, validate, and test the model
@@ -100,6 +102,8 @@ class Trainer:
                 Percentage of random triples to add. E.g. 1.5 = num_train_trips * 1.5 
             sampler: kgpy.Sampler
                 Sampler object. Use this if provided otherwise create based on `train_method` arg
+            decay: float
+                LR decay of form of decay^epoch.
 
         Returns:
         --------
@@ -107,22 +111,17 @@ class Trainer:
         """
         step = 1
         val_mrr = []
+        
+        lr_scheduler = self._get_lr_scheduler(decay)
+        sampler = self._get_sampler(sampler, train_method, train_batch_size, negative_samples, rand_trip_perc)
         model_eval = Evaluation(self.data['valid'], self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
         
-        if isinstance(sampler, sampling.Sampler):
-            sampler = sampler
-        else:
-            sampler = self._get_sampler(train_method, train_batch_size, negative_samples, rand_trip_perc)
-
         for epoch in range(1, epochs+1):
             epoch_loss = torch.Tensor([0]).to(self.device)
-
-            prog_bar = tqdm(sampler, file=sys.stdout)
-            prog_bar.set_description(f"Epoch {epoch}")
             
             self.model.train()
             
-            for batch in prog_bar:
+            for batch in tqdm(sampler, f"Epoch {epoch}"):
                 step += 1
                 batch_loss = self._train_batch(batch, train_method, label_smooth)
                 epoch_loss += batch_loss
@@ -130,7 +129,7 @@ class Trainer:
                 if step % log_every_n_steps == 0 and self.tensorboard:
                     self.writer.add_scalar(f'training_loss', batch_loss.item(), global_step=step)
                 
-            print(f"Epoch {epoch} loss:", epoch_loss.item())
+            print(f"Epoch {epoch} loss:", round(epoch_loss.item(), 4))
 
             if epoch % validate_every == 0:
                 val_mrr.append(self._validate_model(model_eval, epoch))
@@ -147,6 +146,7 @@ class Trainer:
                 utils.save_model(self.model, self.optimizer, epoch, self.data, self.checkpoint_dir, f"{self.model_name}_epoch-{epoch}")
             
             sampler.reset()
+            if decay: lr_scheduler.step()
 
 
         self._test_model(eval_method, non_train_batch_size)
@@ -254,8 +254,7 @@ class Trainer:
 
         if label_smooth != 0.0:
             all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)
-
-
+        
         return self.model.loss(all_scores=all_scores, all_targets=all_lbls)
 
 
@@ -313,11 +312,53 @@ class Trainer:
         model_eval.print_results(test_results)
 
 
+    def _get_lr_scheduler(self, decay):
+        """
+        If not None return a lr.optim.lr_scheduler object. Otherwise return None
 
-    def _get_sampler(self, train_method, bs, num_negative=None, rand_trip_perc=0):
+        Parameters:
+        -----------
+            decay: float
+                Decay to use. Can be None
+        
+        Returns:
+        --------
+        lr.optim.lr_scheduler
+            Scheduler object or None
+        """
+        if not decay:
+            return None 
+        
+        return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda e: decay ** e)
+
+
+    def _get_sampler(self, user_sampler, train_method, bs, num_negative=None, rand_trip_perc=0):
         """
         Retrieve a sampler object for the type of train method
+
+        If user supplied something we use that
+
+        Parameters:
+        -----------
+            user_sampler: kgpy.Sampling.Sampler or None
+                pre-defined sampler or none
+            train_method: str
+                1-N or 1-K
+            bs: int
+                batch_size
+            num_negative: int
+                number onf negative samples. Only applicable for 1-K training
+            rand_trip_perc: float
+                percentage of random triples to induce
+        
+        Returns:
+        --------
+        kgpy.Sampling.Sampler
+            sampler for training
         """
+        if isinstance(user_sampler, sampling.Sampler):
+            return user_sampler
+
         train_method = train_method.upper()
 
         if train_method == "1-K":

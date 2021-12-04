@@ -55,7 +55,7 @@ class Evaluation:
         metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
 
         for k in metrics:
-            print(f"  {k}: {round(results[k], 5)}")
+            print(f"  {k}: {round(results[k], 4)}")
 
 
     def evaluate(self, model):

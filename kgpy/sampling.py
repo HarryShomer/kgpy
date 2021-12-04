@@ -73,13 +73,6 @@ class Sampler(ABC):
             rand_sub = randint(0, self.num_ents-1)
             rand_rel = randint(0, num_rels-1)
             rand_obj = randint(0, self.num_ents-1)
-
-            # Get existing objects for (h, r) pair. If empty then (h, r) doesn't exist
-            # for non-inverse no need to check head as if one exists so does the other
-            # exist_tuple = (rand_rel, rand_sub) if self.inverse else ("tail", rand_rel, rand_sub)
-
-            # Done like this since directly querying defaultdict create key
-            # existing_objs = self.index[exist_tuple] if exist_tuple in self.index else []
  
             # NOTE: Old method for just completely random noise
             if (rand_sub, rand_rel, rand_obj) not in all_triples:

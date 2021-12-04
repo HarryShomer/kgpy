@@ -11,6 +11,7 @@ Models implemented so far:
 5. ConvE
 6. CompGCN
 7. RGCN
+8. TuckER
 
 Possible datasets to run on:
 
