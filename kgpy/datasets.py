@@ -241,7 +241,7 @@ class AllDataSet():
         """
         Create the edge_index and edge_type from the training data 
 
-        Create random edges by:
+        Create random edges by (if specified):
             - generate non inv edge
             - Create inv to go along with it (if needed) 
 
@@ -341,106 +341,6 @@ class AllDataSet():
 
             self.relations = random.sample(range(0, num_rels), rels_to_sample)
             self.num_relations = len(self.relations)
-
-
-    ###################################################################################
-    ###################################################################################
-    ###################################################################################
-
-
-    def add_rel_neighborhood_noise(self, rand_edge_perc=1, sample_rate=.25):
-        """
-        NOTE: As of right now just adds to self.triplets['train']
-        """
-        new_edges = 0
-        rel_adj = self._create_rel_adj()
-
-        if self.inverse:
-            non_inv_edges = [e for e in self.triplets['train'] if e[1] < self.num_non_inv_rels]
-        else:
-            non_inv_edges = self.triplets['train']
-
-        # Number of edges to create
-        num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
-
-        # Makes looking up duplicates O(1)
-        trip_dict = {t: 0 for t in self.all_triplets}
-
-        while new_edges < num_rand_edges and num_rand_edges != 0:
-            # print(f"{new_edges} / {num_rand_edges}")
-            new_edges += self._generate_rel_neighborhood(rel_adj, sample_rate, trip_dict)
-
-
-    def _generate_rel_neighborhood(self, r_adj, sample_rate, all_trips_dict):
-        """
-        Don't modify tensors!!! 
-        
-        Only modifies self.triplets['train'] inplace
-        
-        Returns:
-        --------
-        int
-            number of new edges created
-        """
-        num_new_trips = 0
-
-        # Entity's neighborhood we are simulating
-        e_sim = np.random.randint(self.num_entities)
-
-        # Entity we are slotting in
-        e_rand = np.random.randint(self.num_entities)
-
-        num_trips_to_create = int(len(r_adj[e_sim]) * sample_rate)
-        r_neigbors = random.sample(r_adj[e_sim], num_trips_to_create)
-
-        for r in r_neigbors:
-            # print(">>>", r)
-            num_rel_trips, iters = 0, 0
-
-            # Choose here whether it'll be a tail or head for 
-            head_or_tail = random.randint(0, 1)
-            
-            # TODO: Number of heads/tail to add...should define based on dataset
-            num_head_tails = random.randint(0, 100)
-
-            # Second condition controls for looping forever
-            while num_rel_trips < num_head_tails and iters < num_head_tails * 10:
-                e2 = np.random.randint(self.num_entities)
-                
-                # Only place as head bec
-                trip = (e_rand, r, e2) if head_or_tail == 0 else (e2, r, e_rand)
-
-                # Not same entity and 
-                if e2 != e_rand and trip not in all_trips_dict:
-                    self.triplets['train'].append(trip)
-                    num_rel_trips += 1
-                        
-                    if self.inverse:
-                        self.triplets['train'].append((trip[2], r + self.num_non_inv_rels, trip[0]))
-                        num_rel_trips += 1
-                else:
-                    iters += 1
-            
-            num_new_trips += num_rel_trips
-
-
-        return num_new_trips
-
-
-    def _create_rel_adj(self):
-        """
-        Neighboring relations for each entity
-
-        NOTE: Only non-inverse relations! We'll add the inverse for each 
-        """
-        r_adj = {e: set() for e in range(self.num_entities)}
-
-        for t in self.triplets['train']:
-            if t[1] < self.num_non_inv_rels:
-                r_adj[t[0]].add(t[1])
-                r_adj[t[2]].add(t[1])
-        
-        return r_adj
 
 
 

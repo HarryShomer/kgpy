@@ -18,7 +18,6 @@ class Trainer:
     """
     Control training of model on a particular dataset
     """
-
     def __init__(
         self, 
         model, 
@@ -186,7 +185,7 @@ class Trainer:
         return batch_loss
 
 
-    def _train_batch_1_to_k(self, batch, label_smooth): 
+    def _train_batch_1_to_k(self, batch, label_smooth, reduction="mean"): 
         """
         Train model on single batch using 1-K training method
 
@@ -212,10 +211,10 @@ class Trainer:
         pos_scores = self.model(pos_triplets)
         neg_scores = self.model(neg_triplets)
 
-        return self.model.loss(positive_scores=pos_scores, negative_scores=neg_scores)
+        return self.model.loss(positive_scores=pos_scores, negative_scores=neg_scores, reduction=reduction)
 
 
-    def _train_batch_1_to_n(self, batch, label_smooth): 
+    def _train_batch_1_to_n(self, batch, label_smooth, reduction="mean"): 
         """
         Train model on single batch
 
@@ -255,7 +254,7 @@ class Trainer:
         if label_smooth != 0.0:
             all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)
         
-        return self.model.loss(all_scores=all_scores, all_targets=all_lbls)
+        return self.model.loss(all_scores=all_scores, all_targets=all_lbls, reduction=reduction)
 
 
 

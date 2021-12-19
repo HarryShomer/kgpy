@@ -87,12 +87,14 @@ class MarginRankingLoss(Loss):
             loss
         """
         device = kwargs.get("device", "cpu")
+        reduction = kwargs.get("reduction", "mean")
+
         positive_scores = kwargs['positive_scores']
         negative_scores = kwargs['negative_scores']
 
         target = torch.ones_like(positive_scores, device=device)
 
-        return F.margin_ranking_loss(positive_scores, negative_scores, target, margin=self.margin, reduction='mean')
+        return F.margin_ranking_loss(positive_scores, negative_scores, target, margin=self.margin, reduction=reduction)
 
 
 
@@ -123,6 +125,7 @@ class BCELoss(Loss):
             loss
         """
         device = kwargs.get("device", "cpu")
+        reduction = kwargs.get("reduction", "mean")
 
         if 'positive_scores' in kwargs:
             all_scores = torch.cat((kwargs['positive_scores'], kwargs['negative_scores']))
@@ -135,13 +138,13 @@ class BCELoss(Loss):
             all_targets = kwargs['all_targets']
         
 
-        return F.binary_cross_entropy_with_logits(all_scores, all_targets, reduction='mean')
+        return F.binary_cross_entropy_with_logits(all_scores, all_targets, reduction=reduction)
 
 
 
 class SoftPlusLoss(Loss):
     """
-    Wrapper for Softplus loss (used for ComplEx)
+    Wrapper for Softplus loss (used in original ComplEx paper)
     """
     def __init__(self):
         super().__init__()
@@ -171,39 +174,39 @@ class SoftPlusLoss(Loss):
         return F.softplus(all_scores, beta=1).mean() 
 
 
-def NegativeSamplingLoss(Loss):
-    """
-    See RotatE paper
-    """
-    def __init__(self, margin):
-        super().__init__()
-        self.margin = margin
+# def NegativeSamplingLoss(Loss):
+#     """
+#     See RotatE paper
+#     """
+#     def __init__(self, margin):
+#         super().__init__()
+#         self.margin = margin
 
 
-    def forward(self, positive_scores, negative_scores, negative_weights, device="cpu"):
-        """
-        Compute loss on sample.
+#     def forward(self, positive_scores, negative_scores, negative_weights, device="cpu"):
+#         """
+#         Compute loss on sample.
 
-        Parameters:
-        -----------
-            positive_scores: Tensor
-                Scores for true triplets
-            negative_scores: Tensor
-                Scores for corrupted triplets
-            negative_weights: Tensor
-                Weights for negative_scores
-            device: str
-                device being used. defaults to "cpu"
+#         Parameters:
+#         -----------
+#             positive_scores: Tensor
+#                 Scores for true triplets
+#             negative_scores: Tensor
+#                 Scores for corrupted triplets
+#             negative_weights: Tensor
+#                 Weights for negative_scores
+#             device: str
+#                 device being used. defaults to "cpu"
 
-        Returns:
-        --------
-        float
-            loss
-        """
-        # TODO: Make sure work on batch level
-        pos_score = - F.logsigmoid(self.margin - positive_scores)
+#         Returns:
+#         --------
+#         float
+#             loss
+#         """
+#         # TODO: Make sure work on batch level
+#         pos_score = - F.logsigmoid(self.margin - positive_scores)
 
-        # TODO: Sum - batch?
-        neg_score = negative_weights * F.logsigmoid(negative_scores - self.margin)
+#         # TODO: Sum - batch?
+#         neg_score = negative_weights * F.logsigmoid(negative_scores - self.margin)
 
-        #return (pos_score - neg_score).mean()
+#         #return (pos_score - neg_score).mean()

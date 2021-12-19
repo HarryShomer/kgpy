@@ -18,7 +18,7 @@ class TuckER(SingleEmbeddingModel):
         input_drop=0.3,
         hid_drop1=0.4,
         hid_drop2=0.5,
-        bias=False,
+        bias=True,
         margin=1, 
         regularization = None,
         reg_weight = 0,

@@ -78,7 +78,7 @@ class Evaluation:
         dataloader = torch.utils.data.DataLoader(
                         TestDataset(self.triplets, self.data.all_triplets, self.data.num_entities, inverse=self.inverse, device=self.device), 
                         batch_size=self.bs,
-                        num_workers=8
+                        num_workers=2
                     )
 
         model.eval()
