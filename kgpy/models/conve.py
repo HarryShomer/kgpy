@@ -27,7 +27,8 @@ class ConvE(SingleEmbeddingModel):
         reg_weight=0,
         weight_init=None,
         loss_fn="bce",
-        device='cuda'
+        device='cuda',
+        **kwargs
     ):
         super().__init__(
             type(self).__name__,

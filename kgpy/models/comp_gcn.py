@@ -78,7 +78,8 @@ class CompGCN(BaseGNNModel):
         conve_drop2=.3,
         ker_size=7,    # kernel size
         ker_height=20, # kernel height
-        ker_width=10   # kernel width
+        ker_width=10,   # kernel width
+        **kwargs
     ):
         super().__init__(
             type(self).__name__,

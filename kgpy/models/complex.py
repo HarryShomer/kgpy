@@ -20,7 +20,8 @@ class ComplEx(ComplexEmbeddingModel):
         reg_weight = 5e-2,
         weight_init="normal",
         loss_fn= "bce",
-        device='cpu'
+        device='cpu',
+        **kwargs
     ):
         super().__init__(
             type(self).__name__, 

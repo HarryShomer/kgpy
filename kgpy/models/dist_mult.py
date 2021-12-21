@@ -19,7 +19,8 @@ class DistMult(SingleEmbeddingModel):
         reg_weight = 1e-6,
         weight_init=None,
         loss_fn="ranking",
-        device='cpu'
+        device='cpu',
+        **kwargs
     ):
         super().__init__(
             type(self).__name__,

@@ -21,7 +21,8 @@ class TransE(SingleEmbeddingModel):
         weight_init=None, 
         norm=2,
         loss_fn="ranking",
-        device='cpu'
+        device='cpu',
+        **kwargs
     ):
         super().__init__(
             type(self).__name__,

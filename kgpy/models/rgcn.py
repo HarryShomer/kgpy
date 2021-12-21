@@ -55,6 +55,7 @@ class RGCN(BaseGNNModel):
 
         rgcn_num_bases=None,
         rgcn_num_blocks=100,
+        **kwargs
     ):
         super(RGCN, self).__init__(
             type(self).__name__,

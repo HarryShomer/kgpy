@@ -26,7 +26,8 @@ class RotatE(SingleEmbeddingModel):
         weight_init="uniform",
         loss_fn= "bce",
         device='cpu',
-        epsilon=2 # It's hardcoded as 2 in the author's code
+        epsilon=2, # It's hardcoded as 2 in the author's code
+        **kwargs
     ):
         self.gamma = margin
         self.epsilon = epsilon 

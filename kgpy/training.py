@@ -1,6 +1,7 @@
 import os
 import sys
 import torch
+import optuna
 import numpy as np
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
@@ -69,6 +70,8 @@ class Trainer:
             rand_trip_perc=0,
             sampler=None,
             decay=None,
+            test_model=True,
+            optuna_trial=None
         ):
         """
         Train, validate, and test the model
@@ -88,7 +91,7 @@ class Trainer:
             early_stopping: int
                 Stop training if the mean rank hasn't improved in last "n" validation scores. Defaults to 5
             save_every: int
-                Save model every "n" epochs. Defaults to 25
+                Save model every "n" epochs. Defaults to 25 When None only no epoch specific versions are saved
             log_every_n_steps: int 
                 Log training loss to tensorboard every "n" steps. Defaults to 25
             negative_samples: int
@@ -103,10 +106,15 @@ class Trainer:
                 Sampler object. Use this if provided otherwise create based on `train_method` arg
             decay: float
                 LR decay of form of decay^epoch.
+            test_model: bool
+                Test the model on the test set. Set to false when fine-tuning
+            optuna_trial: optuna.trial.Trial
+                Optuna trial if passed. Default is None
 
         Returns:
         --------
-            None
+        float
+            Test MRR when test_model=True else Validation MRR
         """
         step = 1
         val_mrr = []
@@ -120,7 +128,7 @@ class Trainer:
             
             self.model.train()
             
-            for batch in tqdm(sampler, f"Epoch {epoch}"):
+            for batch in tqdm(sampler, f"Epoch {epoch}", file=sys.stdout):
                 step += 1
                 batch_loss = self._train_batch(batch, train_method, label_smooth)
                 epoch_loss += batch_loss
@@ -133,25 +141,31 @@ class Trainer:
             if epoch % validate_every == 0:
                 val_mrr.append(self._validate_model(model_eval, epoch))
 
-                # Start checking after accumulate more than val_mrr
-                if len(val_mrr) >= early_stopping and np.argmax(val_mrr[-early_stopping:]) == 0:
-                    print(f"Validation loss hasn't improved in the last {early_stopping} validation mean rank scores. Stopping training now!", flush=True)
+                if optuna_trial is not None:
+                    optuna_trial.report(val_mrr[-1], len(val_mrr))
+        
+                    if optuna_trial.should_prune(): 
+                        raise optuna.exceptions.TrialPruned()
+
+                if self._early_stop_criteria(val_mrr, early_stopping):
+                    print(f"Validation loss hasn't improved in the last {early_stopping} Valid MRR scores. Stopping training now!", flush=True)
                     break
 
                 # Only save when we know the model performs better
                 utils.save_model(self.model, self.optimizer, epoch, self.data, self.checkpoint_dir, self.model_name)
 
-            if epoch % save_every == 0:
+            if save_every is not None and epoch % save_every == 0:
                 utils.save_model(self.model, self.optimizer, epoch, self.data, self.checkpoint_dir, f"{self.model_name}_epoch-{epoch}")
             
             sampler.reset()
             if decay: lr_scheduler.step()
 
+        if test_model:
+            return self._test_model(eval_method, non_train_batch_size)
+        
+        return val_mrr[-1]
 
-        self._test_model(eval_method, non_train_batch_size)
    
-
-
     def _train_batch(self, batch, train_method, label_smooth):
         """
         Train model on single batch
@@ -272,7 +286,7 @@ class Trainer:
         Returns:
         --------
         float
-            mean reciprocal rank
+            MRR
         """
         results = model_eval.evaluate(self.model)
 
@@ -302,13 +316,54 @@ class Trainer:
         
         Returns:
         --------
-        None
+        float
+            MRR
         """
         model_eval = Evaluation(self.data['test'], self.data, self.data.inverse, eval_method=eval_method, bs=bs, device=self.device)
         test_results = model_eval.evaluate(self.model)
         
         print("\nTest Results:", flush=True)
         model_eval.print_results(test_results)
+
+        return test_results['mrr']
+
+
+    def _early_stop_criteria(self, val_mrrs, patience):
+        """
+        Criteria for early stopping.
+
+        Must be that the validation hasn't improved in the last `patience` validation steps. This means that if the patience=5, then the last 5
+        validation scores must all be less than 6th to last one.
+
+        Example:
+        --------
+            patience = 3
+            val_mrrs = [10, 12, 14, 15, 15, 14, 15]
+
+            The last 3  - [15, 14, 15] are not better than the 4th to last value (15).
+        
+        Parameters:
+        -----------
+            val_mrrs: list
+                List of validation mrrs for entire training sequence
+            patience: int
+                Validation steps patience b4 terminating. Score has this many steps to improve
+        
+        Returns:
+        --------
+        bool
+            True if should stop otherwise False
+        """
+        if patience is None:
+            return False
+
+        # Need at least this many scores to evaluate early stopping        
+        if len(val_mrrs) < patience + 1:
+            return False
+        
+        # If max value present multiple times, will return 1st index
+        # Also -1 to consider last patience+1 scores!
+        return np.argmax(val_mrrs[-patience-1:]) == 0
 
 
     def _get_lr_scheduler(self, decay):

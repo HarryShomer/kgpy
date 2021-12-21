@@ -4,6 +4,9 @@ import random
 import numpy as np
 from collections import defaultdict
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "datasets")
 
