@@ -39,7 +39,7 @@ class Evaluation:
         
 
 
-    def print_results(self, results):
+    def print_results(self, results, metrics=None):
         """
         Print the results of a given evaluation in a clean fashion
 
@@ -47,12 +47,15 @@ class Evaluation:
         ----------
             results: dict
                 Should be output of `self.evaluate`
+            metrics: list
+                Only print results for these metrics
         
         Returns:
         --------
         None
         """
-        metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
+        if metrics is None:
+            metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
 
         for k in metrics:
             print(f"  {k}: {round(results[k], 4)}")

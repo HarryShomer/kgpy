@@ -54,7 +54,7 @@ class TuckER(SingleEmbeddingModel):
         self.bias = bias 
 
         if bias:
-            self.register_parameter('b', torch.nn.Parameter(torch.zeros(num_entities)))
+            self.b = torch.nn.Parameter(torch.zeros(num_entities))
 
 
     def score_function(self, e1, r):
@@ -64,11 +64,11 @@ class TuckER(SingleEmbeddingModel):
         Parameters:
         -----------
             e1: torch.Tensor
-                entities passed through ConvE
+                entities passed through TuckER
             e2: torch.Tensor
                 entities scored against for link prediction
             r: torch.Tensor
-                relaitons passed through ConvE
+                relaitons passed through TuckER
         
         Returns:
         --------
@@ -83,8 +83,8 @@ class TuckER(SingleEmbeddingModel):
         W_mat = torch.mm(r, self.W.view(r.size(1), -1))
         W_mat = W_mat.view(-1, e1.size(1), e1.size(1))
         W_mat = self.hid_drop1(W_mat)
-
         x = torch.bmm(x, W_mat) 
+        
         x = x.view(-1, e1.size(1))      
         x = self.bn1(x)
         x = self.hid_drop2(x)
@@ -108,9 +108,9 @@ class TuckER(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        e1  = self.ent_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
-        r   = self.rel_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
-        e2  = self.ent_embs(triplets[:, 2])  # Each must only be multiplied by entity belong to *own* triplet!!!
+        e1 = self.ent_embs(triplets[:, 0])
+        r  = self.rel_embs(triplets[:, 1])
+        e2 = self.ent_embs(triplets[:, 2])  # Each must only be multiplied by entity belong to *own* triplet!!!
 
         x = self.score_function(e1, r)
 
@@ -118,9 +118,9 @@ class TuckER(SingleEmbeddingModel):
         # This is the diagonal of the matrix product in 1-N
         x = (x * e2).sum(dim=1).reshape(-1, 1)
 
-        # TODO: ???
-        # if self.bias:
-        #     x += self.b.expand_as(x)
+        # Bias terms associated with specific tails only
+        bias_term = self.b[triplets[:, 2]].unsqueeze(1)
+        x += bias_term
 
         return x
 

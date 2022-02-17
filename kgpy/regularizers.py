@@ -15,3 +15,4 @@ class N3(nn.Module):
         -----------
             triples: torch.Tensor
         """
+        pass

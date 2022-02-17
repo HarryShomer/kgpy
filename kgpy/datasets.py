@@ -346,6 +346,51 @@ class AllDataSet():
             self.num_relations = len(self.relations)
 
 
+    def neighbor_rels_for_entity(self):
+        """
+        Unique relations for entity 
+
+        For heads, we add non-inverse
+        For tails, we add inverse 
+        """
+        r_adj = {e: set() for e in range(self.num_entities)}
+
+        for t in self.triplets['train']:
+            if t[1] < self.num_non_inv_rels:
+                r_adj[t[0]].add(t[1])
+                r_adj[t[2]].add(t[1] + self.num_non_inv_rels)
+
+        return r_adj
+
+    
+    def neighbor_ents_for_entity(self):
+        """
+        Neighboring entities for entity...those connected by some relation
+        """
+        e_adj = {e: set() for e in range(self.num_entities)}
+
+        for t in self.triplets['train']:
+            e_adj[t[0]].add(t[2])
+            e_adj[t[2]].add(t[0])
+
+        return e_adj  
+
+
+    def neighbor_ent_rels_for_entity(self):
+        """
+        Neighboring (e, r) pairs for a given entity
+
+        For heads, we add non-inverse
+        For tails, we add inverse         
+        """
+        er_adj = {e: set() for e in range(self.num_entities)}
+
+        for t in self.triplets['train']:
+            if t[1] < self.num_non_inv_rels:
+                er_adj[t[0]].add((t[1], t[2]))
+                er_adj[t[2]].add((t[1] + self.num_non_inv_rels, t[0]))
+
+        return er_adj
 
 
 #######################################################
