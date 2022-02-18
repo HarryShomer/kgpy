@@ -141,7 +141,7 @@ class ConvE(SingleEmbeddingModel):
         bias_term = self.b[triplets[:, 2]].unsqueeze(1)
         x += bias_term
         
-        return x
+        return x.squeeze(1)
 
 
     def score_head(self, triplets):

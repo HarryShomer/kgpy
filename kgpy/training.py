@@ -221,8 +221,8 @@ class Trainer:
 
         pos_lbls = torch.ones(len(pos_trips)).to(self.device)
         neg_lbls = torch.zeros(len(neg_trips)).to(self.device)
-        all_lbls = torch.cat((pos_lbls, neg_lbls)).unsqueeze(1)
 
+        all_lbls = torch.cat((pos_lbls, neg_lbls))
         all_scores = self.model(all_triples)
 
         if label_smooth != 0.0:
