@@ -29,8 +29,6 @@ class Sampler(ABC):
         self._build_index()
         self.keys = list(self.index.keys())
 
-        self.trip_set = set(self.triplets)  # O(1) when creating negative samples
-
 
     def __iter__(self):
         """
@@ -64,6 +62,28 @@ class Sampler(ABC):
         Increment the iterator by batch size. Constrain to be len(_) at max
         """
         pass
+
+
+    def _get_inv_rel(self, rel):
+        """
+        Get the inverse relation.
+
+        If > num_non_inv_rels then we convert to a regular relation.  Otherwise we convert a regular relation to an inverse
+
+        Parameters:
+        -----------
+            rel: int
+                relation
+        
+        Returns:
+        --------
+        int
+            inverse relation
+        """
+        if rel < int(self.num_rels / 2):
+            return rel + int(self.num_rels / 2)
+        
+        return rel - int(self.num_rels / 2)
 
 
     def _rand_new_trip(self, all_triples):
@@ -227,34 +247,48 @@ class One_to_K(Sampler):
         """
         Samples `self.num_negative` triplets for each training sample in batch
 
-        Do so by randomly replacing either the head or the tail with another entity
+        Do so by randomly replacing either the head or the tail with another entity.
+
+        We exclude possible corruptions that would result in a real triple (see utils.randint_exclude)
 
         Parameters:
         -----------
-            samples: torch.Tensor 
+            samples: list of tuples
                 triplets to corrupt 
 
         Returns:
         --------
-        list
+        torch.Tensor
             Corrupted Triplets
         """
         corrupted_triplets = []
 
-        # head_or_tail = random.choices([0, 1], k=len(samples))
+        for t in samples:
+            head_or_tail = random.choices([0, 2], k=self.num_negative)   # Just do it all at once
 
-        for _ in range(self.num_negative):
-            for i, t in enumerate(samples):
-        
-                head_tail = random.choice([0, 2])
-                rand_ent = utils.randint_exclude(0, self.num_ents, t[head_tail])
+            # Entities to exclude are all (?, r, t) or (h, r, ?)
+            # Process for computing this is different when self.inverse = True or not
+            # When self.inverse = True and looking to exclude (?, r, t). We need to look at the self.index entry (r^-1, t)
+            if self.inverse:
+                head_ents_to_exclude = set(self.index[(self._get_inv_rel(t[1]), t[2])])
+                tail_ents_to_exclude = set(self.index[(t[1], t[0])])
+            else:
+                head_ents_to_exclude = set(self.index[("head", t[1], t[2])])
+                tail_ents_to_exclude = set(self.index[("tail", t[1], t[0])])
 
-                new_sample = (rand_ent, t[1], t[2]) if head_tail == 0 else (t[0], t[1], rand_ent)
+            
+            for i, h_t in zip(range(self.num_negative), head_or_tail):
+                if h_t == 0:
+                    rand_ent = utils.randint_exclude(0, self.num_ents, head_ents_to_exclude)
+                    new_sample = (rand_ent, t[1], t[2])
+                else:
+                    rand_ent = utils.randint_exclude(0, self.num_ents, tail_ents_to_exclude)
+                    new_sample = (t[0], t[1], rand_ent)
+                                
                 corrupted_triplets.append(new_sample)
 
-        corrupted_triplets = torch.Tensor(corrupted_triplets).to(self.device).long()
 
-        return corrupted_triplets
+        return torch.Tensor(corrupted_triplets).to(self.device).long()
 
 
     def __next__(self):

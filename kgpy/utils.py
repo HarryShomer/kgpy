@@ -108,13 +108,16 @@ def checkpoint_exists(model_name, dataset_name, checkpoint_dir, epoch=None):
 
 def randint_exclude(begin, end, exclude):
     """
-    Randint but exclude a number
+    Randint but exclude a list of numbers
 
     Parameters:
     -----------
-        begin: begin of range
-        end: end of range (exclusive)
-        exclude: number to exclude
+        begin: int 
+            begin of range
+        end: int 
+            end of range (exclusive)
+        exclude: Sequence 
+            numbers to exclude
 
     Returns:
     --------
@@ -124,7 +127,7 @@ def randint_exclude(begin, end, exclude):
     while True:
         x = randint(begin, end-1)
 
-        if x != exclude:
+        if x not in exclude:
             return x
 
 
