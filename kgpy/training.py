@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import torch
 import optuna
 import numpy as np
@@ -216,16 +217,18 @@ class Trainer:
             batch loss
         """
         pos_trips, neg_trips = batch[0], batch[1]
-        pos_heads, pos_relations, pos_tails = pos_trips[:, 0].to(self.device), pos_trips[:, 1].to(self.device), pos_trips[:, 2].to(self.device)
-        neg_heads, neg_relations, neg_tails = neg_trips[:, 0].to(self.device), neg_trips[:, 1].to(self.device), neg_trips[:, 2].to(self.device)
+        all_triples = torch.cat((pos_trips, neg_trips))
 
-        pos_triplets = torch.stack((pos_heads, pos_relations, pos_tails), dim=1)
-        neg_triplets = torch.stack((neg_heads, neg_relations, neg_tails), dim=1)
+        pos_lbls = torch.ones(len(pos_trips)).to(self.device)
+        neg_lbls = torch.zeros(len(neg_trips)).to(self.device)
+        all_lbls = torch.cat((pos_lbls, neg_lbls)).unsqueeze(1)
 
-        pos_scores = self.model(pos_triplets)
-        neg_scores = self.model(neg_triplets)
+        all_scores = self.model(all_triples)
 
-        return self.model.loss(positive_scores=pos_scores, negative_scores=neg_scores, reduction=reduction)
+        if label_smooth != 0.0:
+            all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)
+
+        return self.model.loss(all_scores=all_scores, all_targets=all_lbls, reduction=reduction)
 
 
     def _train_batch_1_to_n(self, batch, label_smooth, reduction="mean"): 

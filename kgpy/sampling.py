@@ -1,6 +1,7 @@
 """
 Sampling strategies for training
 """
+import time
 import copy
 import torch
 import random
@@ -27,6 +28,8 @@ class Sampler(ABC):
 
         self._build_index()
         self.keys = list(self.index.keys())
+
+        self.trip_set = set(self.triplets)  # O(1) when creating negative samples
 
 
     def __iter__(self):
@@ -224,11 +227,11 @@ class One_to_K(Sampler):
         """
         Samples `self.num_negative` triplets for each training sample in batch
 
-        Do so by randomly replacing either the head or the tail with another entitiy
+        Do so by randomly replacing either the head or the tail with another entity
 
         Parameters:
         -----------
-            samples: list 
+            samples: torch.Tensor 
                 triplets to corrupt 
 
         Returns:
@@ -238,19 +241,18 @@ class One_to_K(Sampler):
         """
         corrupted_triplets = []
 
+        # head_or_tail = random.choices([0, 1], k=len(samples))
+
         for _ in range(self.num_negative):
             for i, t in enumerate(samples):
-            
-                new_triplet = copy.deepcopy(t)
+        
                 head_tail = random.choice([0, 2])
-                new_triplet[head_tail] = utils.randint_exclude(0, self.num_ents, t[head_tail])
-                
-                corrupted_triplets.append(new_triplet)
+                rand_ent = utils.randint_exclude(0, self.num_ents, t[head_tail])
 
-        corrupted_triplets = torch.stack(corrupted_triplets, dim=0).to(self.device).long()
+                new_sample = (rand_ent, t[1], t[2]) if head_tail == 0 else (t[0], t[1], rand_ent)
+                corrupted_triplets.append(new_sample)
 
-        # TODO: This makes sense for margin loss but for BCE there is no need to have a comparison for each sample
-        # samples = samples.repeat(self.num_negative, 1)
+        corrupted_triplets = torch.Tensor(corrupted_triplets).to(self.device).long()
 
         return corrupted_triplets
 
@@ -269,9 +271,10 @@ class One_to_K(Sampler):
 
         # Collect next self.bs samples & labels
         batch_samples = self.triplets[self.trip_iter: min(self.trip_iter + self.bs, len(self.triplets))]
+        neg_samples = self._sample_negative(batch_samples)  
+
         batch_samples = torch.Tensor([list(x) for x in batch_samples]).to(self.device).long()
-        neg_samples   = self._sample_negative(batch_samples)   
-        
+
         self._increment_iter()
 
         return batch_samples, neg_samples
