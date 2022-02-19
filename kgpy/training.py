@@ -216,14 +216,18 @@ class Trainer:
         loss
             batch loss
         """
-        pos_trips, neg_trips = batch[0], batch[1]
-        all_triples = torch.cat((pos_trips, neg_trips))
+        pos_trips, neg_ents = batch[0], batch[1]
+        # all_triples = torch.cat((pos_trips, neg_trips))
+
+        pos_rel_head = torch.stack((pos_trips[:, 1], pos_trips[:, 0])).T
 
         pos_lbls = torch.ones(len(pos_trips)).to(self.device)
-        neg_lbls = torch.zeros(len(neg_trips)).to(self.device)
-
+        neg_lbls = torch.zeros(neg_ents.numel()).to(self.device)
         all_lbls = torch.cat((pos_lbls, neg_lbls))
-        all_scores = self.model(all_triples)
+
+        pos_scores = self.model(pos_trips)
+        neg_scores = self.model.score_1_to_k(pos_rel_head, neg_ents)
+        all_scores = torch.cat((pos_scores, neg_scores))
 
         if label_smooth != 0.0:
             all_lbls = (1.0 - label_smooth)*all_lbls + (1.0 / self.data.num_entities)

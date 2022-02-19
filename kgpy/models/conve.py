@@ -144,6 +144,25 @@ class ConvE(SingleEmbeddingModel):
         return x.squeeze(1)
 
 
+    def score_1_to_k(self, triplets, ents_ix):
+        """
+        """
+        e1_embedded  = self.ent_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
+        rel_embedded = self.rel_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
+        e2_embedded  = self.ent_embs(ents_ix)
+
+        x = self.score_function(e1_embedded, rel_embedded)
+
+        x = x.reshape(x.shape[0], 1, x.shape[1])
+        x = (x * e2_embedded).sum(dim=2)
+
+        bias_term = self.b[ents_ix]
+        x = (x + bias_term).reshape(-1, 1)
+
+        return x.squeeze(1)
+
+
+
     def score_head(self, triplets):
         """
         Get the score for a given set of triplets against *all possible* heads.

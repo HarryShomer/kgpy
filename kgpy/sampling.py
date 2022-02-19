@@ -86,38 +86,6 @@ class Sampler(ABC):
         return rel - int(self.num_rels / 2)
 
 
-    def _rand_new_trip(self, all_triples):
-        """
-        Generate a new triplet not in the index so far
-        """
-        num_rels = self.num_rels // 2 if self.inverse else self.num_rels
-
-        while True:
-            rand_sub = randint(0, self.num_ents-1)
-            rand_rel = randint(0, num_rels-1)
-            rand_obj = randint(0, self.num_ents-1)
- 
-            # NOTE: Old method for just completely random noise
-            if (rand_sub, rand_rel, rand_obj) not in all_triples:
-
-            # (h, r) exists and t no one of possible objects
-            # if len(existing_objs) > 0 and rand_obj not in existing_objs:
-                all_triples.add((rand_sub, rand_rel, rand_obj))
-
-                if self.inverse:
-                    self.index[(rand_rel, rand_sub)].append(rand_obj)
-                    self.index[(rand_rel + num_rels, rand_obj)].append(rand_sub)                
-                    # No need to add inv to all_triples since we always generate non-inv first
-                else:
-                    self.index[("head", rand_rel, rand_obj)].append(rand_sub)
-                    self.index[("tail", rand_rel, rand_sub)].append(rand_obj) 
-
-                    # Hack since for 1-K it uses self.triplets to determine number of batches
-                    self.triplets.append((rand_sub, rand_rel, rand_obj))
-
-                break
- 
-
     def _build_index(self):
         """
         Create self.index mapping.
@@ -137,32 +105,18 @@ class Sampler(ABC):
         None
         """
         self.index = defaultdict(list)
-        all_triples = set(self.triplets)
+        self.non_index = defaultdict(list) # Hold tails not corresponding to (h, r, ?)
 
-        # Divide by 2 bec. no need to create again for inverse...
-        new_edges = int(len(self.triplets) * np.abs(self.rand_trip_perc))
-        new_edges = new_edges // 2 if self.inverse else new_edges
-
-        # -1 means replace all
-        if self.rand_trip_perc != -1:
-            for t in self.triplets:
-                if self.inverse:
-                    self.index[(t[1], t[0])].append(t[2])
-                else:
-                    self.index[("head", t[1], t[2])].append(t[0])
-                    self.index[("tail", t[1], t[0])].append(t[2])
-        else:
-            self.triplets = []
-            all_triples = set()   # not needed since we don't care about real train samples
-        
-        # Only matters when self.rand_trip_perc > 0
-        for _ in range(new_edges):
-            self._rand_new_trip(all_triples)
+        for t in self.triplets:
+            if self.inverse:
+                self.index[(t[1], t[0])].append(t[2])
+            else:
+                self.index[("head", t[1], t[2])].append(t[0])
+                self.index[("tail", t[1], t[0])].append(t[2])
 
         # Remove duplicates
         for k, v in self.index.items():
-            self.index[k] = list(set(v))
-        
+            self.index[k] = list(set(v)) 
 
             
     def _get_labels(self, samples):
@@ -221,6 +175,12 @@ class One_to_K(Sampler):
         self.num_negative = num_negative        
         self._shuffle()
 
+        # Helps when selecting random samples
+        all_entities = set(range(self.num_ents))
+
+        for p, vals in self.index.items():
+            self.non_index[p] = list(all_entities - set(vals))
+
 
     def __len__(self):
         """
@@ -261,34 +221,21 @@ class One_to_K(Sampler):
         torch.Tensor
             Corrupted Triplets
         """
-        corrupted_triplets = []
+        random_ents = []
 
         for t in samples:
-            head_or_tail = random.choices([0, 2], k=self.num_negative)   # Just do it all at once
+            # head_or_tail = random.choices([0, 2], k=self.num_negative)   # Just do it all at once
 
-            # Entities to exclude are all (?, r, t) or (h, r, ?)
-            # Process for computing this is different when self.inverse = True or not
-            # When self.inverse = True and looking to exclude (?, r, t). We need to look at the self.index entry (r^-1, t)
-            if self.inverse:
-                head_ents_to_exclude = set(self.index[(self._get_inv_rel(t[1]), t[2])])
-                tail_ents_to_exclude = set(self.index[(t[1], t[0])])
-            else:
-                head_ents_to_exclude = set(self.index[("head", t[1], t[2])])
-                tail_ents_to_exclude = set(self.index[("tail", t[1], t[0])])
-
+            if not self.inverse:
+                raise NotImplementedError("1-K Training without inverse triples")
             
-            for i, h_t in zip(range(self.num_negative), head_or_tail):
-                if h_t == 0:
-                    rand_ent = utils.randint_exclude(0, self.num_ents, head_ents_to_exclude)
-                    new_sample = (rand_ent, t[1], t[2])
-                else:
-                    rand_ent = utils.randint_exclude(0, self.num_ents, tail_ents_to_exclude)
-                    new_sample = (t[0], t[1], rand_ent)
-                                
-                corrupted_triplets.append(new_sample)
+            ents_to_sample = self.non_index[(t[1], t[0])]            
+            sampled_ents = random.sample(ents_to_sample, self.num_negative)
+
+            random_ents.append(sampled_ents)
 
 
-        return torch.Tensor(corrupted_triplets).to(self.device).long()
+        return torch.Tensor(random_ents).to(self.device).long()
 
 
     def __next__(self):
@@ -305,6 +252,7 @@ class One_to_K(Sampler):
 
         # Collect next self.bs samples & labels
         batch_samples = self.triplets[self.trip_iter: min(self.trip_iter + self.bs, len(self.triplets))]
+
         neg_samples = self._sample_negative(batch_samples)  
 
         batch_samples = torch.Tensor([list(x) for x in batch_samples]).to(self.device).long()
