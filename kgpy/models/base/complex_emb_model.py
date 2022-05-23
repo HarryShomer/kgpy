@@ -54,11 +54,6 @@ class ComplexEmbeddingModel(EmbeddingModel):
         """
         Create the complex embeddings.
 
-        Parameters:
-        -----------
-            complex_emb: bool
-                True if complex
-
         Returns:
         --------
         tuple

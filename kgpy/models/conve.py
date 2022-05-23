@@ -25,7 +25,7 @@ class ConvE(SingleEmbeddingModel):
         margin=1, 
         regularization='l2',
         reg_weight=0,
-        weight_init=None,
+        weight_init="normal",
         loss_fn="bce",
         device='cuda',
         **kwargs
@@ -109,16 +109,16 @@ class ConvE(SingleEmbeddingModel):
         return x
 
 
-    def score_hrt(self, triplets):
+    def score_hrt(self, triplets, negative_ents=None):
         """
         Pass through ConvE.
 
-        Note: Only work for 1-N
-
         Parameters:
         -----------
-            triplets: list
+            triplets: torch.Tensor
                 List of triplets of form (sub, rel, obj)
+            negative_ents: torch.Tensor
+                Negative entities to score against for each triple
 
         Returns:
         --------
@@ -128,39 +128,21 @@ class ConvE(SingleEmbeddingModel):
         e1_embedded  = self.ent_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
         rel_embedded = self.rel_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
 
-        # Each must only be multiplied by entity belong to *own* triplet!!!
-        e2_embedded  = self.ent_embs(triplets[:, 2])
-
         x = self.score_function(e1_embedded, rel_embedded)
 
-        # Again, they should should only multiply with own entities
-        # This is the diagonal of the matrix product in 1-N
-        x = (x * e2_embedded).sum(dim=1).reshape(-1, 1)
-
-        # Bias terms associated with specific tails only
-        bias_term = self.b[triplets[:, 2]].unsqueeze(1)
-        x += bias_term
+        if negative_ents is not None:
+            # Each must only be multiplied by negative entities belonging to triple
+            e2_embedded  = self.ent_embs(negative_ents)
+            x = x.reshape(x.shape[0], 1, x.shape[1])
+            x = (x * e2_embedded).sum(dim=2)
+            x = (x + self.b[negative_ents]).reshape(-1, 1)
+        else:
+            # Each must only be multiplied by entity belong to *own* triplet!!!
+            e2_embedded  = self.ent_embs(triplets[:, 2])
+            x = (x * e2_embedded).sum(dim=1).reshape(-1, 1)  # This is the diagonal of the matrix product in 1-N
+            x += self.b[triplets[:, 2]].unsqueeze(1)         # Bias terms associated with specific tails only
         
         return x.squeeze(1)
-
-
-    def score_1_to_k(self, triplets, ents_ix):
-        """
-        """
-        e1_embedded  = self.ent_embs(triplets[:, 1]).view(-1, 1, self.k_h, self.k_w)
-        rel_embedded = self.rel_embs(triplets[:, 0]).view(-1, 1, self.k_h, self.k_w)
-        e2_embedded  = self.ent_embs(ents_ix)
-
-        x = self.score_function(e1_embedded, rel_embedded)
-
-        x = x.reshape(x.shape[0], 1, x.shape[1])
-        x = (x * e2_embedded).sum(dim=2)
-
-        bias_term = self.b[ents_ix]
-        x = (x + bias_term).reshape(-1, 1)
-
-        return x.squeeze(1)
-
 
 
     def score_head(self, triplets):
@@ -187,7 +169,6 @@ class ConvE(SingleEmbeddingModel):
         return x
 
         
-    # TODO: For now just pass to score_head since same
     def score_tail(self, triplets):
         """
         Get the score for a given set of triplets against *all possible* tails.

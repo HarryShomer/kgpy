@@ -2,11 +2,11 @@
 Sampling strategies for training
 """
 import time
-import copy
 import torch
 import random
-from random import randint
 import numpy as np 
+from tqdm import tqdm
+from array import array
 from collections import defaultdict
 from abc import ABC, abstractmethod
 
@@ -17,14 +17,13 @@ class Sampler(ABC):
     """
     Abstract base class for implementing samplers
     """
-    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc=0):
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse):
         self.bs = batch_size
         self.triplets = triplets
         self.num_ents = num_ents
         self.num_rels = num_rels
         self.inverse = inverse
         self.device = device
-        self.rand_trip_perc = rand_trip_perc
 
         self._build_index()
         self.keys = list(self.index.keys())
@@ -104,8 +103,7 @@ class Sampler(ABC):
         --------
         None
         """
-        self.index = defaultdict(list)
-        self.non_index = defaultdict(list) # Hold tails not corresponding to (h, r, ?)
+        self.index = defaultdict(list)  # TODO: Change to array? Might be some code that relies on this being a list
 
         for t in self.triplets:
             if self.inverse:
@@ -169,17 +167,24 @@ class One_to_K(Sampler):
         num_negative: int
             Number of corrupted samples to produce per training procedure
     """
-    def __init__(self, triplets, batch_size, num_ents, num_rels, device, num_negative=1, inverse=False, rand_trip_perc=0):
-        super(One_to_K, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc)
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, num_negative=1, inverse=False, filtered=True):
+        super(One_to_K, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse)
 
+        self.filtered = filtered
         self.num_negative = num_negative        
-        self._shuffle()
+        self.reset()
 
-        # Helps when selecting random samples
-        all_entities = set(range(self.num_ents))
+        if filtered:
+            all_entities = set(range(self.num_ents))
+            self.non_index = defaultdict(lambda: array("i", [])) # Hold tails *not* corresponding to (h, r, ?)
 
-        for p, vals in self.index.items():
-            self.non_index[p] = list(all_entities - set(vals))
+            print(">>> Creating additional sampling index for more efficient filtered 1-K training")
+            for p, vals in tqdm(self.index.items(), desc="Creating sampling index"):
+                self.non_index[p] = array("i", all_entities - set(vals)) 
+        else:
+            # TODO: idk...makes it easier for non-filtered setting
+            for k, v in self.index.items():
+                self.index[k] = set(v)
 
 
     def __len__(self):
@@ -224,13 +229,28 @@ class One_to_K(Sampler):
         random_ents = []
 
         for t in samples:
-            # head_or_tail = random.choices([0, 2], k=self.num_negative)   # Just do it all at once
 
-            if not self.inverse:
-                raise NotImplementedError("1-K Training without inverse triples")
-            
-            ents_to_sample = self.non_index[(t[1], t[0])]            
-            sampled_ents = random.sample(ents_to_sample, self.num_negative)
+            if self.inverse:
+
+                if self.filtered:
+                    ents_to_sample = self.non_index[(t[1], t[0])]
+                    sampled_ents = np.random.choice(ents_to_sample, self.num_negative)
+                else:
+                    sampled_ents = np.random.randint(0, self.num_ents, self.num_negative)
+
+            else:    
+                # TODO
+                raise NotImplementedError("TODO: 1-K Training without inverse triples")
+                # head_ents_to_exclude = set(self.index[("head", t[1], t[2])])
+                # tail_ents_to_exclude = set(self.index[("tail", t[1], t[0])])
+                # head_or_tail = random.choices([0, 2], k=self.num_negative)   # Just do it all at once
+                # for i, h_t in zip(range(self.num_negative), head_or_tail):
+                #     if h_t == 0:
+                #         rand_ent = utils.randint_exclude(0, self.num_ents, head_ents_to_exclude)
+                #         new_sample = (rand_ent, t[1], t[2])
+                #     else:
+                #         rand_ent = utils.randint_exclude(0, self.num_ents, tail_ents_to_exclude)
+                #         new_sample = (t[0], t[1], rand_ent)
 
             random_ents.append(sampled_ents)
 
@@ -244,7 +264,7 @@ class One_to_K(Sampler):
 
         Returns:
         -------
-        tuple (list, list)
+        tuple (Tensor, Tensor)
             triplets in batch, corrupted samples for batch
         """
         if self.trip_iter >= len(self.triplets)-1:
@@ -276,10 +296,9 @@ class One_to_N(Sampler):
         num_ents: int
             Total number of entities in dataset
     """
-    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse=False, rand_trip_perc=0):
-        super(One_to_N, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse, rand_trip_perc)
+    def __init__(self, triplets, batch_size, num_ents, num_rels, device, inverse=False):
+        super(One_to_N, self).__init__(triplets, batch_size, num_ents, num_rels, device, inverse)
         self._shuffle()
-        self.rand_trip_perc = rand_trip_perc
 
 
     def __len__(self):

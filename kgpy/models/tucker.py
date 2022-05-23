@@ -4,7 +4,6 @@ Implementation of TuckER.
 See paper for more details - https://arxiv.org/pdf/1901.09590.pdf.
 """
 import torch
-
 from .base.single_emb_model import SingleEmbeddingModel
 
 
@@ -22,7 +21,7 @@ class TuckER(SingleEmbeddingModel):
         margin=1, 
         regularization = None,
         reg_weight = 0,
-        weight_init=None,
+        weight_init="normal",
         loss_fn="bce",
         device='cpu',
         **kwargs

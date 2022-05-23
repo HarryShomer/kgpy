@@ -3,6 +3,7 @@ import torch
 import random
 import numpy as np
 from collections import defaultdict
+from torch_geometric.utils import to_dense_adj
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -151,10 +152,27 @@ class AllDataSet():
         else:
             return self.num_relations
 
+    @property
+    def adjacency(self):
+        """
+        Construct the adjacency matrix. 1 where (u, v) in G else 0
         
+        Notes:
+            - This does not include relation info!
+            - Stores on cpu
+        """
+        edge_index, _ = self.get_edge_tensors()
+
+        # Construct adjacency where 1 = Neighbor otherwise 0
+        adj = to_dense_adj(edge_index).squeeze(0)
+        adj = torch.where(adj > 0, 1, 0)
+
+        return adj
+
+
     def __getitem__(self, key):
         """
-        Get specific dataset
+        Get specific dataset split
         """
         if key == 'train':
             return self.triplets['train']
@@ -240,7 +258,7 @@ class AllDataSet():
         return triplets
 
 
-    def get_edge_tensors(self, rand_edge_perc=0, device='cuda'):
+    def get_edge_tensors(self, rand_edge_perc=0, device='cpu'):
         """
         Create the edge_index and edge_type from the training data 
 
@@ -281,7 +299,6 @@ class AllDataSet():
 
         edge_index	= torch.LongTensor(edge_index).to(device)
         edge_type = torch.LongTensor(edge_type).to(device)
-
 
         return edge_index.transpose(0, 1), edge_type
 
@@ -379,9 +396,7 @@ class AllDataSet():
     def neighbor_ent_rels_for_entity(self):
         """
         Neighboring (e, r) pairs for a given entity
-
-        For heads, we add non-inverse
-        For tails, we add inverse         
+        
         """
         er_adj = {e: set() for e in range(self.num_entities)}
 

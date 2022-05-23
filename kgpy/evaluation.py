@@ -58,10 +58,10 @@ class Evaluation:
             metrics = ["samples", "mr", "mrr", "hits@1", "hits@3", "hits@10"]
 
         for k in metrics:
-            print(f"  {k}: {round(results[k], 4)}")
+            print(f"  {k}: {round(results[k], 4)}", flush=True)
 
 
-    def evaluate(self, model):
+    def evaluate(self, model, raw_scores=False):
         """
         Evaluate the model on the valid/test set
 
@@ -69,6 +69,8 @@ class Evaluation:
         -----------
             model: EmbeddingModel
                 model we are fitting
+            raw_scores: bool
+                Whether to return raw probabilities for each triple
 
         Returns:
         --------
@@ -81,14 +83,14 @@ class Evaluation:
         dataloader = torch.utils.data.DataLoader(
                         TestDataset(self.triplets, self.data.all_triplets, self.data.num_entities, inverse=self.inverse, device=self.device), 
                         batch_size=self.bs,
-                        num_workers=2
+                        num_workers=1
                     )
 
         model.eval()
         with torch.no_grad():
-
-            prog_bar = tqdm(dataloader, file=sys.stdout)
-            prog_bar.set_description(f"Evaluating model")
+            
+            all_raw_scores = []
+            prog_bar = tqdm(dataloader, desc="Evaluating model")
 
             for batch in prog_bar:
                 tail_trips, obj, tail_lbls = batch[0].to(self.device), batch[1].to(self.device), batch[2].to(self.device)
@@ -103,10 +105,18 @@ class Evaluation:
                     self.calc_metrics(tail_preds, obj, tail_lbls, results)
                 else:
                     preds = model(tail_trips, mode="tail")
-                    ranks = self.calc_metrics(preds, obj, tail_lbls, results)
+                    self.calc_metrics(preds, obj, tail_lbls, results)
+                
+                if raw_scores:
+                    preds = preds.gather(1, obj.view(-1,1)).squeeze()
+                    preds = [preds.item()] if len(preds.squeeze().shape) == 0 else preds.tolist()   # When only one test sample...
+                    all_raw_scores.extend(preds)
+        
+        # Don't care about metrics here
+        if raw_scores:
+            return all_raw_scores
 
         ### Average out results
-        # TODO: Is this correct for 1-K?
         results['mr']  = results['mr']  / results['steps'] 
         results['mrr'] = results['mrr'] / results['steps']  * 100
 

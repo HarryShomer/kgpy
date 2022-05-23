@@ -103,17 +103,13 @@ class CompGCN(BaseGNNModel):
 
         self.mlp_agg = mlp
 
-        if self.mlp_agg:
-            self.mlp1 = mlp_layer(self.emb_dim, self.gcn_dim, device=device)
-            self.mlp2 = mlp_layer(self.gcn_dim, self.emb_dim, device=device)
+        if num_bases > 0:
+            raise NotImplementedError("TODO: Basis convolution")
         else:
-            if num_bases > 0:
-                raise NotImplementedError("TODO: Basis convolution")
-            else:
-                self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer1_drop, device=self.device)
+            self.conv1 = CompGCNConv(self.emb_dim, self.gcn_dim,  num_relations, self.comp_func, act=self.act, dropout=layer1_drop, device=self.device)
 
-            if self.num_layers == 2:
-                self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer2_drop, device=self.device)
+        if self.num_layers == 2:
+            self.conv2 = CompGCNConv(self.gcn_dim, self.emb_dim, num_relations, self.comp_func, act=self.act, dropout=layer2_drop, device=self.device)
 
         self.register_parameter('bias', nn.Parameter(torch.zeros(self.num_entities).to(self.device)))
 

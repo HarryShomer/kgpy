@@ -207,7 +207,7 @@ class EmbeddingModel(ABC, nn.Module):
         pass
 
 
-    def forward(self, triplets, mode=None, **kwargs):
+    def forward(self, triplets, mode=None, negative_ents=None, **kwargs):
         """
         Forward pass for our model.
         1. Normalizes entity embeddings to unit length if specified
@@ -220,6 +220,8 @@ class EmbeddingModel(ABC, nn.Module):
                 List of triplets to train on
             mode: str
                 None, head, tail
+            negative_ents: torch.Tensor
+                Negative entities to score against. Only applicable for self.score_hrt
 
         Returns:
         --------
@@ -230,13 +232,11 @@ class EmbeddingModel(ABC, nn.Module):
             self._normalize_entities(2)
 
         if mode is None:
-            scores = self.score_hrt(triplets)
+            scores = self.score_hrt(triplets, negative_ents=negative_ents)
         elif mode == "head":
             scores = self.score_head(triplets)
         elif mode == "tail":
             scores = self.score_tail(triplets)
-        elif mode == "both":
-            scores = self.score_both(triplets)
         else:
             raise ValueError("Invalid value for `mode` passed to Model.forward(). Must be one of [None, 'head', 'tail']")
 

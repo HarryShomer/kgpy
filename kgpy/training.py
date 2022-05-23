@@ -121,7 +121,7 @@ class Trainer:
         val_mrr = []
         
         lr_scheduler = self._get_lr_scheduler(decay)
-        sampler = self._get_sampler(sampler, train_method, train_batch_size, negative_samples, rand_trip_perc)
+        sampler = self._get_sampler(sampler, train_method, train_batch_size, negative_samples)
         model_eval = Evaluation(self.data['valid'], self.data, self.inverse, eval_method=eval_method, bs=non_train_batch_size, device=self.device)
         
         for epoch in range(1, epochs+1):
@@ -129,7 +129,7 @@ class Trainer:
             
             self.model.train()
             
-            for batch in tqdm(sampler, f"Epoch {epoch}", file=sys.stdout):
+            for batch in tqdm(sampler, f"Epoch {epoch}"):
                 step += 1
                 batch_loss = self._train_batch(batch, train_method, label_smooth)
                 epoch_loss += batch_loss
@@ -206,7 +206,7 @@ class Trainer:
 
         Parameters:
         -----------
-            batch: tuple of tuples
+            batch: tuple of Tensors
                 First tuple is positive samples and the second negative. Each ontains head, relations, and tails.
             label_smooth: float
                 Amount of label smoothing to use
@@ -217,16 +217,14 @@ class Trainer:
             batch loss
         """
         pos_trips, neg_ents = batch[0], batch[1]
-        # all_triples = torch.cat((pos_trips, neg_trips))
-
-        pos_rel_head = torch.stack((pos_trips[:, 1], pos_trips[:, 0])).T
+        pos_head_rel = torch.stack((pos_trips[:, 0], pos_trips[:, 1])).T
 
         pos_lbls = torch.ones(len(pos_trips)).to(self.device)
         neg_lbls = torch.zeros(neg_ents.numel()).to(self.device)
         all_lbls = torch.cat((pos_lbls, neg_lbls))
 
         pos_scores = self.model(pos_trips)
-        neg_scores = self.model.score_1_to_k(pos_rel_head, neg_ents)
+        neg_scores = self.model(pos_head_rel, negative_ents=neg_ents)
         all_scores = torch.cat((pos_scores, neg_scores))
 
         if label_smooth != 0.0:
@@ -304,7 +302,7 @@ class Trainer:
             self.writer.add_scalar('MR'      , results['mr'], epoch)
             self.writer.add_scalar('MRR'     , results['mrr'], epoch)
         
-        print(f"Epoch {epoch} validation:")
+        print(f"\nEpoch {epoch} validation:", flush=True)
         model_eval.print_results(results)
 
         return results['mrr']
@@ -393,7 +391,7 @@ class Trainer:
         return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda e: decay ** e)
 
 
-    def _get_sampler(self, user_sampler, train_method, bs, num_negative=None, rand_trip_perc=0):
+    def _get_sampler(self, user_sampler, train_method, bs, num_negative=None):
         """
         Retrieve a sampler object for the type of train method
 
@@ -409,8 +407,6 @@ class Trainer:
                 batch_size
             num_negative: int
                 number onf negative samples. Only applicable for 1-K training
-            rand_trip_perc: float
-                percentage of random triples to induce
         
         Returns:
         --------
@@ -431,7 +427,6 @@ class Trainer:
                         self.device,
                         num_negative=num_negative,
                         inverse=self.data.inverse,
-                        rand_trip_perc=rand_trip_perc
                     )
         elif train_method == "1-N":
             sampler = sampling.One_to_N(
@@ -441,7 +436,6 @@ class Trainer:
                         self.data.num_relations,
                         self.device,
                         inverse=self.data.inverse,
-                        rand_trip_perc=rand_trip_perc
                     )
         else:
             raise ValueError(f"Invalid train method `{train_method}`")
