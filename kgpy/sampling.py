@@ -132,7 +132,10 @@ class Sampler(ABC):
             Size of (samples, num_ents). 
             Entry = 1 when possible head/tail else 0
         """
-        y = torch.zeros(samples.shape[0], self.num_ents, dtype=torch.float16, device=self.device)
+        # Numpy tends to be faster
+        # y = torch.zeros(samples.shape[0], self.num_ents, dtype=torch.float16, device=self.device)
+        y = np.zeros((samples.shape[0], self.num_ents), dtype=np.float16)
+
 
         for i, x in enumerate(samples):
             lbls = self.index[tuple(x)]
@@ -181,10 +184,10 @@ class One_to_K(Sampler):
             print(">>> Creating additional sampling index for more efficient filtered 1-K training")
             for p, vals in tqdm(self.index.items(), desc="Creating sampling index"):
                 self.non_index[p] = array("i", all_entities - set(vals)) 
-        else:
-            # TODO: idk...makes it easier for non-filtered setting
-            for k, v in self.index.items():
-                self.index[k] = set(v)
+        # else:
+        #     # TODO: idk...makes it easier for non-filtered setting
+        #     for k, v in self.index.items():
+        #         self.index[k] = set(v)
 
 
     def __len__(self):
@@ -206,6 +209,36 @@ class One_to_K(Sampler):
         Shuffle samples
         """
         np.random.shuffle(self.triplets)
+
+
+
+
+    def _sample_negative_from_lbl(self, samples):
+        """
+        Samples negative samples from the self._get_lbls() method as 0 entries == negative samples
+
+        Parameters:
+        -----------
+            samples: list/numpy.array
+                Samples in form of (h, r, t)
+        
+        Returns:
+        --------
+        list
+            self.num_negative negative samples for each sample
+        """
+        all_neg_ents = []
+
+        samples =  np.array([(s[1], s[0]) for s in samples])
+        samples_lbls = self._get_labels(samples)
+
+        for sample_lbl in samples_lbls:
+            all_neg_samples = (sample_lbl == 0).nonzero()[0]
+            neg_samples = np.random.choice(all_neg_samples, self.num_negative, replace=False)
+
+            all_neg_ents.append(neg_samples)
+        
+        return all_neg_ents
 
     
     def _sample_negative(self, samples):
@@ -229,7 +262,6 @@ class One_to_K(Sampler):
         random_ents = []
 
         for t in samples:
-
             if self.inverse:
 
                 if self.filtered:
@@ -237,7 +269,6 @@ class One_to_K(Sampler):
                     sampled_ents = np.random.choice(ents_to_sample, self.num_negative)
                 else:
                     sampled_ents = np.random.randint(0, self.num_ents, self.num_negative)
-
             else:    
                 # TODO
                 raise NotImplementedError("TODO: 1-K Training without inverse triples")
@@ -340,13 +371,16 @@ class One_to_N(Sampler):
         if self.inverse:
             batch_ix  = torch.Tensor(batch_samples.astype(np.float)).to(self.device).long()
             batch_lbls = self._get_labels(batch_samples)
+            batch_lbls = torch.Tensor(batch_lbls).type(torch.float16).to(self.device)
 
             return batch_ix, batch_lbls 
         else:
             # Split by type of trip and ent/rel indices
             trip_type = batch_samples[:, 0]
             batch_ix  = torch.Tensor(batch_samples[:, 1:].astype(np.float)).to(self.device).long()
-            batch_lbls = self._get_labels(batch_samples)  
+
+            batch_lbls = self._get_labels(batch_samples) 
+            batch_lbls = torch.Tensor(batch_lbls).type(torch.float16).to(self.device) 
 
             return batch_ix, batch_lbls, trip_type
 

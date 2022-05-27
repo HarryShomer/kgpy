@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import random
 import numpy as np
@@ -114,28 +115,27 @@ class AllDataSet():
         dataset_name, 
         inverse=False, 
         relation_pos="middle",
-        perc_rels=1,
-        perc_ents=1
     ):
+        self.inverse = inverse
         self.dataset_name = dataset_name
         self.relation_pos = relation_pos.lower()
-        self.inverse  = inverse
-        self.perc_rels, self.perc_ents = perc_rels, perc_ents
 
-        self.entity2idx, self.relation2idx = self._load_mapping()
-        self.entities, self.relations = list(set(self.entity2idx)), list(set(self.relation2idx))
+        if "codex" in dataset_name.lower():
+            self.entity2idx, self.relation2idx = self._load_codex_mapping()
+        else:
+            self.entity2idx, self.relation2idx = self._load_mapping()
 
-        # Updates self.entities and self.relations
-        self.prune_dataset()
-
-        self.num_entities = len(self.entities)
-        self.num_relations = len(self.relations)
+        self.num_entities = len(self.entity2idx)
+        self.num_relations = len(self.relation2idx)
 
         self.triplets = {
             "train": self._load_triplets("train"),
             "valid": self._load_triplets("valid"),
             "test":  self._load_triplets("test")
         }
+
+        if "codex" in dataset_name.lower():
+            self._filter_codex()
 
         if self.inverse:
             self.num_relations *= 2
@@ -186,10 +186,7 @@ class AllDataSet():
 
     def _load_mapping(self):
         """
-        Load the mappings for the relations and entities from file
-
-        key = name
-        value = id
+        Load the mappings for the relations and entities from a file
 
         Returns:
         --------
@@ -207,6 +204,28 @@ class AllDataSet():
             for line in f:
                 line_components = [l.strip() for l in line.split()]
                 relation2idx[line_components[0]] = int(line_components[1])
+
+        return entity2idx, relation2idx
+
+
+    def _load_codex_mapping(self):
+        """
+        Load the mappings for the relations and entities for CoDEX
+
+        Returns:
+        --------
+        tuple
+            dictionaries mapping an entity or relation to it's ID
+        """
+        entity2idx, relation2idx = {}, {}
+
+        with open(os.path.join(DATA_DIR, self.dataset_name, "entities.json"), "r") as f:
+            for ix, ent in enumerate(json.load(f)):
+                entity2idx[ent] = ix
+
+        with open(os.path.join(DATA_DIR, self.dataset_name, "relations.json"), "r") as f:
+            for ix, rel in enumerate(json.load(f)):
+                relation2idx[rel] = ix
 
         return entity2idx, relation2idx
 
@@ -230,10 +249,6 @@ class AllDataSet():
         """
         triplets = []
 
-        # Make lookup O(1)
-        ent_set = set(range(0, len(self.entities)))
-        rel_set = set(range(0, len(self.relations)))
-
         with open(os.path.join(DATA_DIR, self.dataset_name, f"{data_split}.txt"), "r") as file:
             for line in file:
                 fields = [l.strip() for l in line.split()]
@@ -246,19 +261,15 @@ class AllDataSet():
                 r = self.relation2idx[fields[1]]
                 o = self.entity2idx[fields[2]]
 
-                # This only matters when we are pruning the dataset
-                # In that case we are only using a portion of either the relations or entities
-                if s in ent_set and o in ent_set and r in rel_set:
-                    triplets.append((s, r, o))
-                    
-                    if self.inverse:
-                        triplets.append((o, r + self.num_relations, s))
-
+                triplets.append((s, r, o))
+                
+                if self.inverse:
+                    triplets.append((o, r + self.num_relations, s))
 
         return triplets
 
 
-    def get_edge_tensors(self, rand_edge_perc=0, device='cpu'):
+    def get_edge_tensors(self, device='cpu'):
         """
         Create the edge_index and edge_type from the training data 
 
@@ -278,89 +289,44 @@ class AllDataSet():
         tuple of torch.Tensor
             edge_index, edge_type    
         """
-        new_edges = 0
         edge_index, edge_type = [], []
-
-        if self.inverse:
-            non_inv_edges = [e for e in self.triplets['train'] if e[1] < self.num_non_inv_rels]
-        else:
-            non_inv_edges = self.triplets['train']
-
-        num_rand_edges = int(len(non_inv_edges) * rand_edge_perc)
 
         for sub, rel, obj in self.triplets['train']:
             edge_index.append((sub, obj))
             edge_type.append(rel)
-      
-        # Add 'num_keep_edges' random edges
-        while new_edges < num_rand_edges and num_rand_edges != 0:
-            self._generate_rand_edge(edge_index, edge_type)
-            new_edges += 1  
-
+    
         edge_index	= torch.LongTensor(edge_index).to(device)
         edge_type = torch.LongTensor(edge_type).to(device)
 
         return edge_index.transpose(0, 1), edge_type
 
 
-
-    def _generate_rand_edge(self, edge_index, edge_type):
+    def _filter_codex(self):
         """
-        Generate a single random edge. Modifies params in place!
-
-        Parameters:
-        -----------
-            edge_index: torch.Tensor
-                2xN tensor holding head and tail nodes
-            edge_type: torch.Tensor
-                1xN tensor holding relation type
-
-        Returns:
-        --------
-        None
-        """
-        num_rels = int(self.num_relations / 2) if self.inverse else self.num_relations
-
-        r = np.random.randint(num_rels)
-        s = np.random.randint(self.num_entities)
-        o = np.random.randint(self.num_entities)
-
-        edge_index.append((s, o))
-        edge_type.append(r)
-
-        if self.inverse:
-            edge_index.append((o, s))
-            edge_type.append(r + num_rels)
+        CodDEX entity and relation files contain *all possible*. We want to filter for just the dataset.
+        This can be determined via the triples
         
-
-    def prune_dataset(self):
+        Modifies self.num_entities, self.num_relations
         """
-        Prune either the entities or relations in the dataset.
+        ent_set, rel_set = set(), set()
 
-        Modifies instance param in-place!
-            - self.entities, self.relations
-            - self.num_entities, self.num_relations
-        
-        Returns:
-        --------
-        None
-        """
-        if self.perc_ents != 1 and self.perc_rels != 1:
-            raise ValueError("Both perc_ents and perc_rels can't both < 1. Only one.")
+        for split in ['train', 'valid', 'test']:
+            for t in self.triplets[split]:
+                ent_set.add(t[0])
+                ent_set.add(t[2])
+                rel_set.add(t[1])
 
-        if self.perc_ents != 1:
-            num_ents = len(self.entities)
-            ents_to_sample = int(num_ents * self.perc_ents)
+        ### Remove entities and relations not found in train/valid/test splits
+        for e in list(self.entity2idx):
+            if self.entity2idx[e] not in ent_set:
+                self.entity2idx.pop(e)
 
-            self.entities = random.sample(range(0, num_ents), ents_to_sample)
-            self.num_entities = len(self.entities)
+        for r in list(self.relation2idx):
+            if self.relation2idx[r] not in rel_set:
+                self.relation2idx.pop(r)
 
-        if self.perc_rels != 1:
-            num_rels = len(self.relations)
-            rels_to_sample = int(num_rels * self.perc_rels)
-
-            self.relations = random.sample(range(0, num_rels), rels_to_sample)
-            self.num_relations = len(self.relations)
+        self.num_entities = len(self.entity2idx)
+        self.num_relations = len(self.relation2idx)
 
 
     def neighbor_rels_for_entity(self):
@@ -429,7 +395,6 @@ class WN18RR(AllDataSet):
         super().__init__("WN18RR", **kwargs)
 
 
-
 class FB15K(AllDataSet):
     """
     Load the FB15k dataset
@@ -452,3 +417,27 @@ class YAGO3_10(AllDataSet):
     """
     def __init__(self, **kwargs):
         super().__init__("YAGO3-10", **kwargs)
+
+
+class CODEX_S(AllDataSet):
+    """
+    Load the Codex-M dataset
+    """
+    def __init__(self, **kwargs):
+        super().__init__("CODEX-S", **kwargs)  
+
+
+class CODEX_M(AllDataSet):
+    """
+    Load the Codex-M dataset
+    """
+    def __init__(self, **kwargs):
+        super().__init__("CODEX-M", **kwargs)  
+
+
+class CODEX_L(AllDataSet):
+    """
+    Load the Codex-M dataset
+    """
+    def __init__(self, **kwargs):
+        super().__init__("CODEX-L", **kwargs)  

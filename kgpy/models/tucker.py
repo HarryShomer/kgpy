@@ -91,16 +91,16 @@ class TuckER(SingleEmbeddingModel):
         return x
 
 
-    def score_hrt(self, triplets):
+    def score_hrt(self, triplets, negative_ents=None):
         """
         Scores for specific tails (e.g. against certain entities).
 
-        Only works for 1-N
-
         Parameters:
         -----------
-            triplets: list
-                List of triplets of form [sub, rel, obj]
+            triplets: torch.Tensor
+                List of triplets of form (sub, rel, obj)
+            negative_ents: torch.Tensor
+                Negative entities to score against for each triple
 
         Returns:
         --------
@@ -109,17 +109,21 @@ class TuckER(SingleEmbeddingModel):
         """
         e1 = self.ent_embs(triplets[:, 0])
         r  = self.rel_embs(triplets[:, 1])
-        e2 = self.ent_embs(triplets[:, 2])  # Each must only be multiplied by entity belong to *own* triplet!!!
 
         x = self.score_function(e1, r)
 
-        # Again, they should should only multiply with own entities
-        # This is the diagonal of the matrix product in 1-N
-        x = (x * e2).sum(dim=1).reshape(-1, 1)
+        if negative_ents is not None:
+            # Each must only be multiplied by negative entities belonging to triple
+            e2 = self.ent_embs(negative_ents)
+            x = x.reshape(x.shape[0], 1, x.shape[1])
+            x = (x * e2).sum(dim=2)
+            x = (x + self.b[negative_ents]).reshape(-1, 1)
+        else:
+            # Each must only be multiplied by entity belong to *own* triplet!!!
+            e2 = self.ent_embs(triplets[:, 2])
+            x = (x * e2).sum(dim=1).reshape(-1, 1)    # This is the diagonal of the matrix product in 1-N
+            x += self.b[triplets[:, 2]].unsqueeze(1)  # Bias terms associated with specific tails only
 
-        # Bias terms associated with specific tails only
-        bias_term = self.b[triplets[:, 2]].unsqueeze(1)
-        x += bias_term
 
         return x.squeeze(1)
 
@@ -150,7 +154,7 @@ class TuckER(SingleEmbeddingModel):
         return x
 
 
-    # TODO: For now just pass to score_head since same
+    # TODO: For now just pass to score_tail since the same
     def score_head(self, triplets):
         """
         Get the score for a given set of triplets against *all possible* heads.
@@ -165,4 +169,4 @@ class TuckER(SingleEmbeddingModel):
         Tensor
             List of scores for triplets
         """
-        return self.score_head(triplets)
+        return self.score_tail(triplets)

@@ -48,21 +48,19 @@ class ConvE(SingleEmbeddingModel):
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.feature_map_drop = torch.nn.Dropout2d(feat_drop)
 
-        # emb_dim = kernel_h * kernel_w
+        # NOTE: Ensure that emb_dim = kernel_h * kernel_w
         self.k_h = k_h
         self.k_w = emb_dim // k_h
         self.filters = filters
         self.ker_sz = ker_sz
 
-        # TODO: Determine why wrong
-        # flat_sz_h = int(2*self.k_w) - self.ker_sz + 1
-        # flat_sz_w = self.k_h - self.ker_sz + 1
-        # self.hidden_size = flat_sz_h*flat_sz_w*filters
-        self.hidden_size = 9728
+        flat_sz_h = int(2*self.k_h) - self.ker_sz + 1
+        flat_sz_w = self.k_w - self.ker_sz + 1
+        self.hidden_size = flat_sz_h*flat_sz_w*filters
 
         self.conv1 = torch.nn.Conv2d(1, filters, kernel_size=(ker_sz, ker_sz), stride=1, padding=0)
         self.bn0 = torch.nn.BatchNorm2d(1)
-        self.bn1 = torch.nn.BatchNorm2d(32)
+        self.bn1 = torch.nn.BatchNorm2d(self.filters)
         self.bn2 = torch.nn.BatchNorm1d(emb_dim)
 
         self.b = torch.nn.Parameter(torch.zeros(num_entities))  # bias
