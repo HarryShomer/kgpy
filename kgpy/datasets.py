@@ -120,10 +120,7 @@ class AllDataSet():
         self.dataset_name = dataset_name
         self.relation_pos = relation_pos.lower()
 
-        if "codex" in dataset_name.lower():
-            self.entity2idx, self.relation2idx = self._load_codex_mapping()
-        else:
-            self.entity2idx, self.relation2idx = self._load_mapping()
+        self.entity2idx, self.relation2idx = self._load_mapping()
 
         self.num_entities = len(self.entity2idx)
         self.num_relations = len(self.relation2idx)
@@ -133,9 +130,6 @@ class AllDataSet():
             "valid": self._load_triplets("valid"),
             "test":  self._load_triplets("test")
         }
-
-        if "codex" in dataset_name.lower():
-            self._filter_codex()
 
         if self.inverse:
             self.num_relations *= 2
@@ -208,29 +202,6 @@ class AllDataSet():
         return entity2idx, relation2idx
 
 
-    def _load_codex_mapping(self):
-        """
-        Load the mappings for the relations and entities for CoDEX
-
-        Returns:
-        --------
-        tuple
-            dictionaries mapping an entity or relation to it's ID
-        """
-        entity2idx, relation2idx = {}, {}
-
-        with open(os.path.join(DATA_DIR, self.dataset_name, "entities.json"), "r") as f:
-            for ix, ent in enumerate(json.load(f)):
-                entity2idx[ent] = ix
-
-        with open(os.path.join(DATA_DIR, self.dataset_name, "relations.json"), "r") as f:
-            for ix, rel in enumerate(json.load(f)):
-                relation2idx[rel] = ix
-
-        return entity2idx, relation2idx
-
-
-
     def _load_triplets(self, data_split):
         """
         Load the triplets for a given dataset and data split.
@@ -299,34 +270,6 @@ class AllDataSet():
         edge_type = torch.LongTensor(edge_type).to(device)
 
         return edge_index.transpose(0, 1), edge_type
-
-
-    def _filter_codex(self):
-        """
-        CodDEX entity and relation files contain *all possible*. We want to filter for just the dataset.
-        This can be determined via the triples
-        
-        Modifies self.num_entities, self.num_relations
-        """
-        ent_set, rel_set = set(), set()
-
-        for split in ['train', 'valid', 'test']:
-            for t in self.triplets[split]:
-                ent_set.add(t[0])
-                ent_set.add(t[2])
-                rel_set.add(t[1])
-
-        ### Remove entities and relations not found in train/valid/test splits
-        for e in list(self.entity2idx):
-            if self.entity2idx[e] not in ent_set:
-                self.entity2idx.pop(e)
-
-        for r in list(self.relation2idx):
-            if self.relation2idx[r] not in rel_set:
-                self.relation2idx.pop(r)
-
-        self.num_entities = len(self.entity2idx)
-        self.num_relations = len(self.relation2idx)
 
 
     def neighbor_rels_for_entity(self):
@@ -441,3 +384,11 @@ class CODEX_L(AllDataSet):
     """
     def __init__(self, **kwargs):
         super().__init__("CODEX-L", **kwargs)  
+
+
+class NELL_995(AllDataSet):
+    """
+    Load the Codex-M dataset
+    """
+    def __init__(self, **kwargs):
+        super().__init__("NELL-995", **kwargs)  

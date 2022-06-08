@@ -64,8 +64,6 @@ class TuckER(SingleEmbeddingModel):
         -----------
             e1: torch.Tensor
                 entities passed through TuckER
-            e2: torch.Tensor
-                entities scored against for link prediction
             r: torch.Tensor
                 relaitons passed through TuckER
         
@@ -117,13 +115,12 @@ class TuckER(SingleEmbeddingModel):
             e2 = self.ent_embs(negative_ents)
             x = x.reshape(x.shape[0], 1, x.shape[1])
             x = (x * e2).sum(dim=2)
-            x = (x + self.b[negative_ents]).reshape(-1, 1)
+            x = (x + self.b[negative_ents]).reshape(-1, 1) if self.bias else x.reshape(-1, 1)
         else:
             # Each must only be multiplied by entity belong to *own* triplet!!!
             e2 = self.ent_embs(triplets[:, 2])
             x = (x * e2).sum(dim=1).reshape(-1, 1)    # This is the diagonal of the matrix product in 1-N
-            x += self.b[triplets[:, 2]].unsqueeze(1)  # Bias terms associated with specific tails only
-
+            x += self.b[triplets[:, 2]].unsqueeze(1)  if self.bias else x # Bias terms associated with specific tails only
 
         return x.squeeze(1)
 

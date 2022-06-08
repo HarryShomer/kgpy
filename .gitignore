@@ -8,7 +8,7 @@ notes.txt
 build/
 .pytest_cache
 *.sbatch
-scripts/
+# scripts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

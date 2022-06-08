@@ -68,7 +68,6 @@ class Trainer:
             negative_samples=1,
             eval_method="filtered",
             label_smooth=0,
-            rand_trip_perc=0,
             sampler=None,
             decay=None,
             test_model=True,
@@ -101,8 +100,6 @@ class Trainer:
                 How to evaluate data. Filtered vs raw. Defaults to filtered
             label_smooth: float
                 Label smoothing when training
-            rand_trip_perc: float
-                Percentage of random triples to add. E.g. 1.5 = num_train_trips * 1.5 
             sampler: kgpy.Sampler
                 Sampler object. Use this if provided otherwise create based on `train_method` arg
             decay: float
